@@ -336,7 +336,6 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         read_common_header_64(bytes, header.data)
     };
-    println!("{:?}", common_header);
     println!("{} file, {}, version {}",
         elf_file_type_string(common_header.e_type),
         machine_type_string(common_header.e_machine),
