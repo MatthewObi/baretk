@@ -3,36 +3,49 @@ use std::fs::File;
 use std::io::{Read, Write};
 use crate::query;
 use crate::elf;
+use crate::pe;
 
 pub struct Section {
-    pub name: String,
     pub addr: u64,
     pub bytes: Vec<u8>,
 }
 
+pub struct Segment {
+    pub perm: u8,
+    pub offset: u64,
+    pub vaddr: u64,
+    pub paddr: u64,
+    pub size: usize,
+}
+
 pub struct Program {
-    pub flags: u8,
+    pub bits: u8,
+    pub endianess: u8,
     pub machine_type: String,
+    pub program_table: Vec<Segment>,
     pub section_table: HashMap<String, Section>
 }
 
-impl Program {
-    pub fn has_section(&self, name: &'static str) -> bool {
-        self.section_table.contains_key(&String::from(name))
-    }
-}
-
-pub fn build_program_from_binary(bytes: &Vec<u8>, flags: Option<u8>, machine_type: Option<String>) -> Program {
+pub fn build_program_from_binary(bytes: &Vec<u8>, bits: Option<u8>, endianess: Option<u8>, machine_type: Option<String>) -> Program {
     let mut section_table = HashMap::<String, Section>::new();
     section_table.insert(String::from("file"), Section {
-        name: String::from("file"),
         addr: 0x0,
         bytes: bytes.clone()
     });
+    let mut program_table = Vec::<Segment>::new();
+    program_table.push(Segment {
+        perm: 0x7,
+        offset: 0x0,
+        vaddr: 0x0,
+        paddr: 0x0,
+        size: bytes.len(),
+    });
     Program {
-        flags: flags.unwrap_or_default(),
+        bits: bits.unwrap_or_default(),
+        endianess: endianess.unwrap_or_default(),
         machine_type: machine_type.unwrap_or("unknown".to_string()),
-        section_table: section_table,
+        program_table,
+        section_table,
     }
 }
 
@@ -58,6 +71,7 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     let file_type = query::get_file_type(bytes);
     match file_type {
         query::FileType::Elf => elf::load_program_from_bytes(bytes),
-        _ => build_program_from_binary(bytes, None, None)
+        query::FileType::PE  => pe::load_program_from_bytes(bytes),
+        _ => build_program_from_binary(bytes, None, None, None)
     }
 }

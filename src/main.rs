@@ -3,10 +3,16 @@ use std::fs::File;
 use std::io::{Read, Write};
 mod dis;
 mod query;
-mod elf;
 mod prog;
-mod arm;
 mod dump;
+mod util;
+
+mod elf;
+mod pe;
+
+mod arm;
+mod x86;
+mod riscv;
 
 // An objdump-like utility.
 fn cmd_dump(in_file: &String, out_file: Option<&String>) {

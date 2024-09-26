@@ -1,6 +1,7 @@
 use std::{collections::HashMap, usize};
-use crate::prog::{Program, Section};
-use crate::arm::disassemble_arm;
+use crate::prog::{Program, Section, Segment};
+use crate::dump::rwx_string;
+use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_from_u8_vec, read_u64_from_u8_vec, BIG_ENDIAN, LITTLE_ENDIAN};
 
 struct Header {
     class: u8,
@@ -62,14 +63,18 @@ fn elf_file_type_string(t: u16) -> String {
 struct MachineType(u16);
 impl MachineType {
     const UNKNOWN   : MachineType = MachineType(0x0);
+    const X86       : MachineType = MachineType(0x3);
     const ARM       : MachineType = MachineType(0x28);
+    const AMD64     : MachineType = MachineType(0x3e);
 }
 
 fn machine_type_string(t: u16) -> String {
     let mt = MachineType(t);
     match mt {
         MachineType::UNKNOWN => format!("unknown"),
-        MachineType::ARM     => format!("ARM"),
+        MachineType::X86     => format!("x86"),
+        MachineType::AMD64   => format!("amd64"),
+        MachineType::ARM     => format!("arm"),
         _ => format!("unknown"),
     }
 }
@@ -98,42 +103,6 @@ struct SectionHeaderEntry {
     sh_info: u32,
     sh_addralign: u64,
     sh_entsize: u64,
-}
-
-fn read_u16_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8) -> u16 {
-    let b: &[u8; 2] = (&bytes[start..start+2]).try_into().unwrap();
-    match endianness { 
-        0x01 => u16::from_le_bytes(*b), 
-        0x02 => u16::from_be_bytes(*b),
-        _ => panic!("unknown endian type {}", endianness)
-    }
-}
-
-fn read_u32_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8) -> u32 {
-    let b: &[u8; 4] = (&bytes[start..start+4]).try_into().unwrap();
-    match endianness { 
-        0x01 => u32::from_le_bytes(*b), 
-        0x02 => u32::from_be_bytes(*b),
-        _ => panic!("unknown endian type {}", endianness)
-    }
-}
-
-fn read_u64_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8) -> u64 {
-    let b: &[u8; 8] = (&bytes[start..start+8]).try_into().unwrap();
-    match endianness { 
-        0x01 => u64::from_le_bytes(*b), 
-        0x02 => u64::from_be_bytes(*b),
-        _ => panic!("unknown endian type {}", endianness)
-    }
-}
-
-fn read_u32_to_u64_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8, ) -> u64 {
-    let b: &[u8; 4] = (&bytes[start..start+4]).try_into().unwrap();
-    u64::from(match endianness { 
-        0x01 => u32::from_le_bytes(*b), 
-        0x02 => u32::from_be_bytes(*b),
-        _ => panic!("unknown endian type {}", endianness)
-    })
 }
 
 fn read_common_header_32(bytes: &Vec<u8>, endianness: u8) -> HeaderCommon {
@@ -260,13 +229,6 @@ fn abi_string(abi: u8) -> String {
     }
 }
 
-fn rwx_string(flags: u32) -> String {
-    format!("{}{}{}", 
-        if (flags & 0x4) != 0x0 { "R" } else { " " },
-        if (flags & 0x2) != 0x0 { "W" } else { " " },
-        if (flags & 0x1) != 0x0 { "X" } else { " " })
-}
-
 fn shstring(bytes: &Vec<u8>, idx: u32) -> String {
     let i = idx as usize;
     let mut j = i;
@@ -288,10 +250,8 @@ fn shstring(bytes: &Vec<u8>, idx: u32) -> String {
 fn build_section_table(bytes: &Vec<u8>, common_header: &HeaderCommon, section_headers: &Vec<SectionHeaderEntry>) -> HashMap<String, Section> {
     let mut hashmap = HashMap::<String, Section>::new();
     for entry in section_headers {
-        let name = shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name);
-        let key = name.clone();
+        let key = shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name);
         hashmap.insert(key, Section {
-            name: name,
             addr: entry.sh_addr,
             bytes: bytes[entry.sh_offset as usize..(entry.sh_offset as usize + entry.sh_size as usize)].to_vec()
         });
@@ -299,72 +259,80 @@ fn build_section_table(bytes: &Vec<u8>, common_header: &HeaderCommon, section_he
     hashmap
 }
 
-fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>) -> Program {
-    Program{
-        flags: (if header.class == 0x1 { 1 } else { 0 }) | (if header.data == 0x1 { 2 } else { 0 }),
-        machine_type: machine_type_string(common_header.e_machine),
-        section_table: build_section_table(bytes, common_header, section_headers)
+fn build_program_table(bytes: &Vec<u8>, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>) -> Vec<Segment> {
+    let mut v = Vec::<Segment>::new();
+    for entry in program_headers {
+        v.push(Segment {
+            perm: entry.p_flags as u8,
+            offset: entry.p_offset,
+            paddr: entry.p_paddr,
+            vaddr: entry.p_vaddr,
+            size: entry.p_filesz as usize,
+        });
     }
+    v
 }
 
-fn disassemble_section(section: &Section, program: &Program) -> String {
-    let mt = program.machine_type.as_str();
-    match mt {
-        "ARM" => disassemble_arm(section, program),
-        _ => format!("Hello,")
+fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>) -> Program {
+    Program{
+        bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
+        endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
+        machine_type: machine_type_string(common_header.e_machine),
+        program_table: build_program_table(bytes, common_header, program_headers),
+        section_table: build_section_table(bytes, common_header, section_headers)
     }
 }
 
 pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     let header = read_header(bytes);
-    println!("ELF version {}, {}-bit, {}, ABI {} version {}",
-        header.version, 
-        match header.class {
-            0x1 => "32",
-            0x2 => "64",
-            _ => "?"
-        }, 
-        match header.data {
-            0x1 => "little-endian",
-            0x2 => "big-endian",
-            _ => "unknown-endian"
-        }, 
-        abi_string(header.abi), 
-        header.abi_version);
+    // println!("ELF version {}, {}-bit, {}, ABI {} version {}",
+    //     header.version, 
+    //     match header.class {
+    //         0x1 => "32",
+    //         0x2 => "64",
+    //         _ => "?"
+    //     }, 
+    //     match header.data {
+    //         0x1 => "little-endian",
+    //         0x2 => "big-endian",
+    //         _ => "unknown-endian"
+    //     }, 
+    //     abi_string(header.abi), 
+    //     header.abi_version);
     let common_header = if header.class == 0x1 {
         read_common_header_32(bytes, header.data)
     } else {
         read_common_header_64(bytes, header.data)
     };
-    println!("{} file, {}, version {}",
-        elf_file_type_string(common_header.e_type),
-        machine_type_string(common_header.e_machine),
-        common_header.e_version);
-    println!("entry point = 0x{:08x}", common_header.e_entry);
-    println!("program header = 0x{:08x}", common_header.e_phoff);
-    println!("section header = 0x{:08x}", common_header.e_shoff);
-    println!("header size = 0x{:08x}", common_header.e_ehsize);
+    // println!("{} file, {}, version {}",
+    //     elf_file_type_string(common_header.e_type),
+    //     machine_type_string(common_header.e_machine),
+    //     common_header.e_version);
+    // println!("entry point = 0x{:08x}", common_header.e_entry);
+    // println!("program header = 0x{:08x}", common_header.e_phoff);
+    // println!("section header = 0x{:08x}", common_header.e_shoff);
+    // println!("header size = 0x{:08x}", common_header.e_ehsize);
     let program_headers = if header.class == 0x1 {
         read_program_header_32(bytes, common_header.e_phnum, common_header.e_phentsize, common_header.e_phoff, header.data)
     } else {
         read_program_header_64(bytes, common_header.e_phnum, common_header.e_phentsize, common_header.e_phoff, header.data)
     };
-    println!("Program headers: count={}", common_header.e_phnum);
-    for entry in &program_headers {
-        println!("{} offset=0x{:08x}, size=0x{:08x}, align=0x{:04x}", 
-            rwx_string(entry.p_flags), entry.p_offset, entry.p_filesz, entry.p_align);
-    }
+    // println!("Program headers: count={}", common_header.e_phnum);
+    // for entry in &program_headers {
+    //     println!("{} offset=0x{:08x}, size=0x{:08x}, align=0x{:04x}", 
+    //         rwx_string(entry.p_flags), entry.p_offset, entry.p_filesz, entry.p_align);
+    // }
     let section_headers = if header.class == 0x1 {
         read_section_header_32(bytes, common_header.e_shnum, common_header.e_shentsize, common_header.e_shoff, header.data)
     } else {
         read_section_header_64(bytes, common_header.e_shnum, common_header.e_shentsize, common_header.e_shoff, header.data)
     };
-    println!("Section headers: count={}", common_header.e_shnum);
-    for entry in &section_headers {
-        println!("name={:<16} offset=0x{:08x}, size=0x{:08x}", 
-            shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
-            entry.sh_offset,
-            entry.sh_size);
-    }
+    // println!("Section headers: count={}", common_header.e_shnum);
+    // for entry in &section_headers {
+    //     println!("name={:<16} offset=0x{:08x}, size=0x{:08x}", 
+    //         shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
+    //         entry.sh_offset,
+    //         entry.sh_size);
+    // }
     build_program(bytes, &header, &common_header, &program_headers, &section_headers)
 }
