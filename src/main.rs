@@ -74,6 +74,7 @@ fn cmd_disassemble(in_file: &String, out_file: Option<&String>) {
 fn cmd_help() {
     println!("Available commands:");
     println!("    baretk dis");
+    println!("    baretk dump");
     println!("    baretk help");
 }
 

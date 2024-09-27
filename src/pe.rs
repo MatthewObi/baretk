@@ -84,6 +84,17 @@ struct CoffHeader {
 }
 
 struct OptionalHeader {
+    magic: u16,
+    major_link_ver: u8,
+    minor_link_ver: u8,
+    code_size: u32,
+    data_size: u32,
+    bss_size: u32,
+    entry_point: u32,
+    base_addr: u32,
+}
+
+struct WinHeader {
 
 }
 
@@ -98,7 +109,22 @@ fn read_coff_header(bytes: &Vec<u8>, offset: usize) -> CoffHeader {
 }
 
 fn read_optional_header(bytes: &Vec<u8>, offset: usize) -> OptionalHeader {
-    OptionalHeader {}
+    OptionalHeader {
+        magic: read_u16_from_u8_vec(bytes, offset, LITTLE_ENDIAN),
+        major_link_ver: bytes[offset+0x2],
+        minor_link_ver: bytes[offset+0x3],
+        code_size: read_u32_from_u8_vec(bytes, offset+0x4, LITTLE_ENDIAN),
+        data_size: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
+        bss_size: read_u32_from_u8_vec(bytes, offset+0xc, LITTLE_ENDIAN),
+        entry_point: read_u32_from_u8_vec(bytes, offset+0x10, LITTLE_ENDIAN),
+        base_addr: read_u32_from_u8_vec(bytes, offset+0x14, LITTLE_ENDIAN),
+    }
+}
+
+fn read_windows_header_32p(bytes: &Vec<u8>, offset: usize) -> WinHeader {
+    WinHeader {
+        
+    }
 }
 
 pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
@@ -113,6 +139,16 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         None
     };
+    if optional_header.is_some() {
+        let opt = optional_header.unwrap();
+        println!("{} v{}.{}, base_addr=0x{:08x} code_size=0x{:08x} entry_point=0x{:08x}", 
+            match opt.magic { 0x10b => "PE32", 0x20b => "PE32+", _ => ""},
+            opt.major_link_ver,
+            opt.minor_link_ver,
+            opt.base_addr,
+            opt.code_size,
+            opt.entry_point);
+    }
     let toffset = coff_header.optional_header_size as usize + offset;
     println!("TODO: finish parsing PE executable files.\n");
     prog::build_program_from_binary(bytes, Some(32), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine)))
