@@ -37,6 +37,24 @@ const OPCODE_ADC_DWORD_STR: u8 = 0x11;
 const OPCODE_ADC_BYTE_LD: u8 = 0x12;
 const OPCODE_ADC_DWORD_LD: u8 = 0x13;
 const OPCODE_ADC_AL_IMM8: u8 = 0x14;
+const OPCODE_PUSH_REG: u8 = 0x50;
+const OPCODE_PUSH_RAX: u8 = OPCODE_PUSH_REG+AX;
+const OPCODE_PUSH_RCX: u8 = OPCODE_PUSH_REG+CX;
+const OPCODE_PUSH_RDX: u8 = OPCODE_PUSH_REG+DX;
+const OPCODE_PUSH_RBX: u8 = OPCODE_PUSH_REG+BX;
+const OPCODE_PUSH_RSP: u8 = OPCODE_PUSH_REG+SP;
+const OPCODE_PUSH_RBP: u8 = OPCODE_PUSH_REG+BP;
+const OPCODE_PUSH_RSI: u8 = OPCODE_PUSH_REG+SI;
+const OPCODE_PUSH_RDI: u8 = OPCODE_PUSH_REG+DI;
+const OPCODE_POP_REG: u8 = 0x58;
+const OPCODE_POP_RAX: u8 = OPCODE_POP_REG+AX;
+const OPCODE_POP_RCX: u8 = OPCODE_POP_REG+CX;
+const OPCODE_POP_RDX: u8 = OPCODE_POP_REG+DX;
+const OPCODE_POP_RBX: u8 = OPCODE_POP_REG+BX;
+const OPCODE_POP_RSP: u8 = OPCODE_POP_REG+SP;
+const OPCODE_POP_RBP: u8 = OPCODE_POP_REG+BP;
+const OPCODE_POP_RSI: u8 = OPCODE_POP_REG+SI;
+const OPCODE_POP_RDI: u8 = OPCODE_POP_REG+DI;
 const OPCODE_RET: u8 = 0xc3;
 
 const OPSIZE_BYTE: u8 = 0x0;
@@ -52,6 +70,8 @@ enum Operation {
     Sbb,
     And,
     Or,
+    Push,
+    Pop,
     Ret,
 }
 
@@ -180,8 +200,8 @@ impl Operand {
 #[derive(Clone, Copy)]
 struct Instruction {
     operation: Operation,
-    dest: Operand,
-    source: Operand,
+    reg1: Operand,
+    reg2: Operand,
     offset: usize,
     ins_size: u8,
 }
@@ -189,18 +209,24 @@ struct Instruction {
 impl Instruction {
     fn print(self) -> String {
         match self.operation {
-            Operation::Add => format!("add {}, {}", self.dest.print(), self.source.print()),
-            Operation::Adc => format!("adc {}, {}", self.dest.print(), self.source.print()),
-            Operation::Sub => format!("sub {}, {}", self.dest.print(), self.source.print()),
-            Operation::Or => format!("or {}, {}", self.dest.print(), self.source.print()),
-            Operation::Ret => format!("ret"),
+            Operation::Add  => format!("add {}, {}", self.reg1.print(), self.reg2.print()),
+            Operation::Adc  => format!("adc {}, {}", self.reg1.print(), self.reg2.print()),
+            Operation::Sub  => format!("sub {}, {}", self.reg1.print(), self.reg2.print()),
+            Operation::Or   => format!("or {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Push => format!("push {}",    self.reg1.print()),
+            Operation::Pop  => format!("pop {}",     self.reg1.print()),
+            Operation::Ret  => format!("ret"),
             _ => format!("unknown")
         }
     }
 }
 
 fn ins_dest_src(foffset: usize, ins_size: u8, operation: Operation, dest: Operand, source: Operand) -> Instruction {
-    Instruction { operation, dest, source, offset: foffset, ins_size }
+    Instruction { operation, reg1: dest, reg2: source, offset: foffset, ins_size }
+}
+
+fn ins_single_op(foffset: usize, ins_size: u8, operation: Operation, op: Operand) -> Instruction {
+    Instruction { operation, reg1: op, reg2: Operand::Nothing, offset: foffset, ins_size }
 }
 
 // op dest:r8, source:r8
@@ -344,6 +370,11 @@ fn disassemble_x86_al_imm8(operation: Operation, bytes: &[u8], offset: usize) ->
     Some(ins_dest_src(offset, 2, operation, Operand::Reg8(AX), Operand::ImmU8(imm)))
 }
 
+fn disassemble_x86_push_pop(operation: Operation, bytes: &[u8], offset: usize) -> Option<Instruction> {
+    let imm = bytes[offset] - match operation { Operation::Push => OPCODE_PUSH_REG, Operation::Pop => OPCODE_POP_REG, _ => 0 };
+    Some(ins_single_op(offset, 1, operation, Operand::Reg64(imm)))
+}
+
 fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instruction> {
     if offset >= bytes.len() {
         return None
@@ -364,14 +395,30 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
         OPCODE_ADC_DWORD_STR => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_DWORD, false),
         OPCODE_ADC_BYTE_LD   => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_BYTE, true),
         OPCODE_ADC_DWORD_LD  => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_DWORD, true),
-        OPCODE_RET           => Some(Instruction { offset: offset, ins_size: 1, operation: Operation::Ret, dest: Operand::Nothing, source: Operand::Nothing }),
+        OPCODE_PUSH_RAX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RCX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RDX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RBX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RSP      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RBP      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RSI      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_PUSH_RDI      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
+        OPCODE_POP_RAX       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RCX       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RDX       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RBX       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RSP       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RBP       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RSI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_POP_RDI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_RET           => Some(Instruction { offset: offset, ins_size: 1, operation: Operation::Ret, reg1: Operand::Nothing, reg2: Operand::Nothing }),
         _ => None
     }
 }
 
 pub fn disassemble_x86(section: &Section, program: &Program) -> String {
     let mut offset = 0x0;
-    let bytes = &[0x00u8, 0x05u8, 0x00u8, 0x00u8, 0xf0, 0x00];
+    let bytes = &[0x50, 0x51, 0x00u8, 0x05u8, 0x00u8, 0x00u8, 0xf0, 0x00, 0x59, 0x58, 0xc3];
     while offset < bytes.len() { 
         let res = disassemble_x86_instruction(bytes, offset);
         if res.is_some() {
