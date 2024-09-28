@@ -9,3 +9,18 @@ BARETK (Binary Analysis and Reverse Engineering Tool Kit) is a work-in-progress 
 * The ability to generate appoximate pseudo C code from compiled machine code in executables.
 * The ability to search for specific binary sequences inside binaries or executables.
 * The ability to run executable files in a sandboxed environment via an interpreter or JIT recompilation.
+
+## Planned supported architectures
+
+* x86 (i386, amd64)
+* ARM (AArch32, AArch64)
+* RISCV (rv32, rv64)
+* More in the future
+
+## Planned supported binary formats
+
+* ELF
+* PE/COFF
+* Raw Binary
+* ROM file
+* Disc/Filesystem images (ISO, FAT32, etc.)
