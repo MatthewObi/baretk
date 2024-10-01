@@ -37,3 +37,7 @@ pub fn read_u32_to_u64_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8
         _ => panic!("unknown endian type {}", endianness)
     })
 }
+
+pub fn i32_sign(x: i32) -> &'static str {
+    if x < 0 { "-" } else { "+" }
+}

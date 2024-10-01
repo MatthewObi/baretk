@@ -1,4 +1,5 @@
 use crate::prog::{Section, Program};
+use crate::util::i32_sign;
 
 const AX: u8 = 0x0;
 const CX: u8 = 0x1;
@@ -37,6 +38,27 @@ const OPCODE_ADC_DWORD_STR: u8 = 0x11;
 const OPCODE_ADC_BYTE_LD: u8 = 0x12;
 const OPCODE_ADC_DWORD_LD: u8 = 0x13;
 const OPCODE_ADC_AL_IMM8: u8 = 0x14;
+const OPCODE_AND_BYTE_STR: u8 = 0x20;
+const OPCODE_AND_DWORD_STR: u8 = 0x21;
+const OPCODE_AND_BYTE_LD: u8 = 0x22;
+const OPCODE_AND_DWORD_LD: u8 = 0x23;
+const OPCODE_AND_AL_IMM8: u8 = 0x24;
+const OPCODE_SUB_BYTE_STR: u8 = 0x28;
+const OPCODE_SUB_DWORD_STR: u8 = 0x29;
+const OPCODE_SUB_BYTE_LD: u8 = 0x2a;
+const OPCODE_SUB_DWORD_LD: u8 = 0x2b;
+const OPCODE_SUB_AL_IMM8: u8 = 0x2c;
+const OPCODE_XOR_BYTE_STR: u8 = 0x30;
+const OPCODE_XOR_DWORD_STR: u8 = 0x31;
+const OPCODE_XOR_BYTE_LD: u8 = 0x32;
+const OPCODE_XOR_DWORD_LD: u8 = 0x33;
+const OPCODE_XOR_AL_IMM8: u8 = 0x34;
+const OPCODE_CMP_BYTE_STR: u8 = 0x38;
+const OPCODE_CMP_DWORD_STR: u8 = 0x39;
+const OPCODE_CMP_BYTE_LD: u8 = 0x3a;
+const OPCODE_CMP_DWORD_LD: u8 = 0x3b;
+const OPCODE_CMP_AL_IMM8: u8 = 0x3c;
+const OPCODE_REX_W: u8 = 0x48;
 const OPCODE_PUSH_REG: u8 = 0x50;
 const OPCODE_PUSH_RAX: u8 = OPCODE_PUSH_REG+AX;
 const OPCODE_PUSH_RCX: u8 = OPCODE_PUSH_REG+CX;
@@ -55,6 +77,11 @@ const OPCODE_POP_RSP: u8 = OPCODE_POP_REG+SP;
 const OPCODE_POP_RBP: u8 = OPCODE_POP_REG+BP;
 const OPCODE_POP_RSI: u8 = OPCODE_POP_REG+SI;
 const OPCODE_POP_RDI: u8 = OPCODE_POP_REG+DI;
+const OPCODE_MOV_BYTE_STR: u8 = 0x88;
+const OPCODE_MOV_DWORD_STR: u8 = 0x89;
+const OPCODE_MOV_BYTE_LD: u8 = 0x8a;
+const OPCODE_MOV_DWORD_LD: u8 = 0x8b;
+const OPCODE_NOP: u8 = 0x90;
 const OPCODE_RET: u8 = 0xc3;
 
 const OPSIZE_BYTE: u8 = 0x0;
@@ -70,29 +97,36 @@ enum Operation {
     Sbb,
     And,
     Or,
+    Xor,
+    Cmp,
+    Mov,
+    Nop,
     Push,
     Pop,
     Ret,
 }
+
+const PREFIX_REX_W: u8 = 0;
 
 #[derive(Clone, Copy)]
 enum Operand {
     Nothing,
     ImmU8(u8),
     ImmU16(u16),
+    ImmU32(u32),
     Reg8(u8),
     Reg8H(u8),
     Reg16(u8),
     Reg32(u8),
     Reg64(u8),
-    PtrRegByte(u8, u16),
+    PtrRegByte(u8, i32),
     PtrRegRegByte(u8, u8, u8),
     PtrRegRegWord(u8, u8, u8),
     PtrRegRegDword(u8, u8, u8),
     PtrRegRegQword(u8, u8, u8),
-    PtrRegWord(u8, u16),
-    PtrRegDword(u8, u16),
-    PtrRegQword(u8, u16),
+    PtrRegWord(u8, i32),
+    PtrRegDword(u8, i32),
+    PtrRegQword(u8, i32),
     PtrRelByte(u32),
     PtrRelWord(u32),
     PtrRelDword(u32),
@@ -127,6 +161,7 @@ impl Operand {
         match self {
             Self::ImmU8(x)  => format!("0x{:02x}", x),
             Self::ImmU16(x)  => format!("0x{:04x}", x),
+            Self::ImmU32(x)  => format!("0x{:08x}", x),
             Self::Reg8(x)  => format!("{}", print_reg(0x0, x)),
             Self::Reg8H(x) => format!("{}", print_reg(0x4, x)),
             Self::Reg16(x) => format!("{}", print_reg(0x1, x)),
@@ -136,28 +171,28 @@ impl Operand {
                 if offset == 0x0 {
                     format!("BYTE PTR [{}]", print_reg(0x3, reg))
                 } else {
-                    format!("BYTE PTR [{}+0x{:02x}]", print_reg(0x3, reg), offset)
+                    format!("BYTE PTR [{}{}0x{:02x}]", print_reg(0x3, reg), i32_sign(offset), offset.abs())
                 }
             },
             Self::PtrRegWord(reg, offset) => {
                 if offset == 0x0 {
                     format!("WORD PTR [{}]", print_reg(0x3, reg))
                 } else {
-                    format!("WORD PTR [{}+0x{:02x}]", print_reg(0x3, reg), offset)
+                    format!("WORD PTR [{}{}0x{:02x}]", print_reg(0x3, reg), i32_sign(offset), offset.abs())
                 }
             },
             Self::PtrRegDword(reg, offset) => {
                 if offset == 0x0 {
                     format!("DWORD PTR [{}]", print_reg(0x3, reg))
                 } else {
-                    format!("DWORD PTR [{}+0x{:02x}]", print_reg(0x3, reg), offset)
+                    format!("DWORD PTR [{}{}0x{:02x}]", print_reg(0x3, reg), i32_sign(offset), offset.abs())
                 }
             },
             Self::PtrRegQword(reg, offset) => {
                 if offset == 0x0 {
                     format!("QWORD PTR [{}]", print_reg(0x3, reg))
                 } else {
-                    format!("QWORD PTR [{}+0x{:02x}]", print_reg(0x3, reg), offset)
+                    format!("QWORD PTR [{}{}0x{:04x}]", print_reg(0x3, reg), i32_sign(offset), offset.abs())
                 }
             },
             Self::PtrRelByte(rel) => format!("BYTE PTR [rip+0x{:08x}]", rel),
@@ -213,8 +248,13 @@ impl Instruction {
             Operation::Adc  => format!("adc {}, {}", self.reg1.print(), self.reg2.print()),
             Operation::Sub  => format!("sub {}, {}", self.reg1.print(), self.reg2.print()),
             Operation::Or   => format!("or {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::And  => format!("and {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Xor  => format!("xor {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Cmp  => format!("cmp {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Mov  => format!("mov {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::Push => format!("push {}",    self.reg1.print()),
             Operation::Pop  => format!("pop {}",     self.reg1.print()),
+            Operation::Nop  => format!("nop"),
             Operation::Ret  => format!("ret"),
             _ => format!("unknown")
         }
@@ -241,7 +281,7 @@ fn ins_regh_regh(foffset: usize, ins_size: u8, operation: Operation, op_size: u8
 }
 
 // op SIZE PTR [dest:r+offset:i], source:r
-fn ins_preg_regh(foffset: usize, ins_size: u8, operation: Operation, op_size: u8, dest: u8, offset: u16, source: u8) -> Instruction {
+fn ins_preg_regh(foffset: usize, ins_size: u8, operation: Operation, op_size: u8, dest: u8, offset: i32, source: u8) -> Instruction {
     match op_size {
         OPSIZE_BYTE  => ins_dest_src(foffset, ins_size, operation, Operand::PtrRegByte(dest, offset), Operand::Reg8H(source)),
         OPSIZE_WORD  => ins_dest_src(foffset, ins_size, operation, Operand::PtrRegWord(dest, offset), Operand::Reg16(source)),
@@ -252,7 +292,7 @@ fn ins_preg_regh(foffset: usize, ins_size: u8, operation: Operation, op_size: u8
 }
 
 // op dest:r, SIZE PTR [source:r+offset:i]
-fn ins_regh_preg(foffset: usize, ins_size: u8, operation: Operation, op_size: u8, dest: u8, source: u8, offset: u16) -> Instruction {
+fn ins_regh_preg(foffset: usize, ins_size: u8, operation: Operation, op_size: u8, dest: u8, source: u8, offset: i32) -> Instruction {
     match op_size {
         OPSIZE_BYTE  => ins_dest_src(foffset, ins_size, operation, Operand::Reg8H(dest), Operand::PtrRegByte(source, offset)),
         OPSIZE_WORD  => ins_dest_src(foffset, ins_size, operation, Operand::Reg16(dest), Operand::PtrRegWord(source, offset)),
@@ -352,6 +392,16 @@ fn disassemble_x86_op_op(operation: Operation, bytes: &[u8], offset: usize, op_s
             }
         }
     }
+    else if x & 0b11000000 == 0b01000000 {
+        let source = (x >> 3) & 0b111;
+        let op2 = x & 0b111;
+        let o = if bytes[offset+2] & 0x80 != 0 { -(0x100 - bytes[offset+2] as i32) } else { bytes[offset+2] as i32 };
+        if swap_operands {
+            return Some(ins_regh_preg(offset, 3, operation, op_size, source, op2, o))
+        } else {
+            return Some(ins_preg_regh(offset, 3, operation, op_size, op2, o, source))
+        }
+    }
     else if x & 0b11000000 == 0b11000000 {
         let dest = (x >> 3) & 0b111;
         let source = x & 0b111;
@@ -380,6 +430,9 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
         return None
     }
     let opcode = bytes[offset];
+    let prefix = match opcode {
+        _ => 0,
+    };
     match opcode {
         OPCODE_ADD_BYTE_STR  => disassemble_x86_op_op(Operation::Add, bytes, offset, OPSIZE_BYTE, false),
         OPCODE_ADD_DWORD_STR => disassemble_x86_op_op(Operation::Add, bytes, offset, OPSIZE_DWORD, false),
@@ -395,6 +448,27 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
         OPCODE_ADC_DWORD_STR => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_DWORD, false),
         OPCODE_ADC_BYTE_LD   => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_BYTE, true),
         OPCODE_ADC_DWORD_LD  => disassemble_x86_op_op(Operation::Adc, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_ADC_AL_IMM8   => disassemble_x86_al_imm8(Operation::Adc, bytes, offset),
+        OPCODE_AND_BYTE_STR  => disassemble_x86_op_op(Operation::And, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_AND_DWORD_STR => disassemble_x86_op_op(Operation::And, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_AND_BYTE_LD   => disassemble_x86_op_op(Operation::And, bytes, offset, OPSIZE_BYTE, true),
+        OPCODE_AND_DWORD_LD  => disassemble_x86_op_op(Operation::And, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_AND_AL_IMM8   => disassemble_x86_al_imm8(Operation::And, bytes, offset),
+        OPCODE_SUB_BYTE_STR  => disassemble_x86_op_op(Operation::Sub, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_SUB_DWORD_STR => disassemble_x86_op_op(Operation::Sub, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_SUB_BYTE_LD   => disassemble_x86_op_op(Operation::Sub, bytes, offset, OPSIZE_BYTE, true),
+        OPCODE_SUB_DWORD_LD  => disassemble_x86_op_op(Operation::Sub, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_SUB_AL_IMM8   => disassemble_x86_al_imm8(Operation::Sub, bytes, offset),
+        OPCODE_XOR_BYTE_STR  => disassemble_x86_op_op(Operation::Xor, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_XOR_DWORD_STR => disassemble_x86_op_op(Operation::Xor, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_XOR_BYTE_LD   => disassemble_x86_op_op(Operation::Xor, bytes, offset, OPSIZE_BYTE, true),
+        OPCODE_XOR_DWORD_LD  => disassemble_x86_op_op(Operation::Xor, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_XOR_AL_IMM8   => disassemble_x86_al_imm8(Operation::Xor, bytes, offset),
+        OPCODE_CMP_BYTE_STR  => disassemble_x86_op_op(Operation::Cmp, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_CMP_DWORD_STR => disassemble_x86_op_op(Operation::Cmp, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_CMP_BYTE_LD   => disassemble_x86_op_op(Operation::Cmp, bytes, offset, OPSIZE_BYTE, true),
+        OPCODE_CMP_DWORD_LD  => disassemble_x86_op_op(Operation::Cmp, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_CMP_AL_IMM8   => disassemble_x86_al_imm8(Operation::Cmp, bytes, offset),
         OPCODE_PUSH_RAX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
         OPCODE_PUSH_RCX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
         OPCODE_PUSH_RDX      => disassemble_x86_push_pop(Operation::Push, bytes, offset),
@@ -411,6 +485,11 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
         OPCODE_POP_RBP       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
         OPCODE_POP_RSI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
         OPCODE_POP_RDI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_MOV_BYTE_STR  => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_MOV_DWORD_STR => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_MOV_BYTE_LD   => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_BYTE, true),
+        OPCODE_MOV_DWORD_LD  => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_DWORD, true),
+        OPCODE_NOP           => Some(Instruction { operation: Operation::Nop, reg1: Operand::Nothing, reg2: Operand::Nothing, offset: offset, ins_size: 1 }),
         OPCODE_RET           => Some(Instruction { offset: offset, ins_size: 1, operation: Operation::Ret, reg1: Operand::Nothing, reg2: Operand::Nothing }),
         _ => None
     }
@@ -418,17 +497,25 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
 
 pub fn disassemble_x86(section: &Section, program: &Program) -> String {
     let mut offset = 0x0;
-    let bytes = &[0x50, 0x51, 0x00u8, 0x05u8, 0x00u8, 0x00u8, 0xf0, 0x00, 0x59, 0x58, 0xc3];
+    let bytes = &[
+        0x50u8,
+        0x31, 0xc0,
+        0x89, 0x47, 0xf4,
+        0x58,
+        0x90,
+        0xc3
+    ];
+    // let bytes = section.bytes.as_slice();
     while offset < bytes.len() { 
         let res = disassemble_x86_instruction(bytes, offset);
         if res.is_some() {
             let ins = res.unwrap();
-            println!("{}", ins.print());
+            println!("{:<08x}: {}", offset, ins.print());
             offset += ins.ins_size as usize;
         }
         else {
-            println!("(bad)");
-            break;
+            println!("{:<08x}: (bad) ; 0x{:02x}", offset, bytes[offset]);
+            offset += 1;
         }
     }
     format!("TODO: x86 stuff")
