@@ -152,8 +152,8 @@ static REG_NAMES: [[&'static str; 5]; 16] = [
     ["r15l", "r15w", "r15d", "r15", "r15l"],
 ];
 
-fn print_reg(s: usize, x: u8) -> String {
-    format!("{}", REG_NAMES[x as usize][s])
+fn print_reg(s: usize, x: u8) -> &'static str {
+    REG_NAMES[x as usize][s]
 }
 
 impl Operand {

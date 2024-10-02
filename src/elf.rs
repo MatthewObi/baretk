@@ -47,15 +47,15 @@ impl ElfType {
     const CORE: ElfType = ElfType(0x4);
 }
 
-fn elf_file_type_string(t: u16) -> String {
+fn elf_file_type_string(t: u16) -> &'static str {
     let et = ElfType(t);
     match et {
-        ElfType::NONE => format!("none"),
-        ElfType::REL  => format!("Relocatable"),
-        ElfType::EXEC => format!("Executable"),
-        ElfType::DYN  => format!("Shared object"),
-        ElfType::CORE => format!("Core"),
-        _ => format!("unknown"),
+        ElfType::NONE => "none",
+        ElfType::REL  => "Relocatable",
+        ElfType::EXEC => "Executable",
+        ElfType::DYN  => "Shared object",
+        ElfType::CORE => "Core",
+        _ => "unknown",
     }
 }
 
@@ -68,14 +68,14 @@ impl MachineType {
     const AMD64     : MachineType = MachineType(0x3e);
 }
 
-fn machine_type_string(t: u16) -> String {
+fn machine_type_string(t: u16) -> &'static str {
     let mt = MachineType(t);
     match mt {
-        MachineType::UNKNOWN => format!("unknown"),
-        MachineType::X86     => format!("x86"),
-        MachineType::AMD64   => format!("amd64"),
-        MachineType::ARM     => format!("arm"),
-        _ => format!("unknown"),
+        MachineType::UNKNOWN => "unknown",
+        MachineType::X86     => "x86",
+        MachineType::AMD64   => "amd64",
+        MachineType::ARM     => "arm",
+        _ => "unknown",
     }
 }
 
@@ -277,7 +277,7 @@ fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon,
     Program{
         bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
-        machine_type: machine_type_string(common_header.e_machine),
+        machine_type: machine_type_string(common_header.e_machine).to_string(),
         program_table: build_program_table(bytes, common_header, program_headers),
         section_table: build_section_table(bytes, common_header, section_headers)
     }

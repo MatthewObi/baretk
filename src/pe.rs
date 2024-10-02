@@ -31,16 +31,16 @@ impl MachineType {
     const AMD64: MachineType = MachineType(0x8664); // (x86-64)
 }
 
-fn get_machine_type_string(machine: u16) -> String {
+fn get_machine_type_string(machine: u16) -> &'static str {
     let m = MachineType(machine);
-    String::from(match m {
+    match m {
         MachineType::UNKNOWN => "unknown",
         MachineType::RISCV32 => "riscv32",
         MachineType::RISCV64 => "riscv64",
         MachineType::I386 => "x86",
         MachineType::AMD64 => "amd64",
         _ => "?",
-    })
+    }
 }
 
 #[derive(PartialEq)]
@@ -123,7 +123,7 @@ fn read_optional_header(bytes: &Vec<u8>, offset: usize) -> OptionalHeader {
 
 fn read_windows_header_32p(bytes: &Vec<u8>, offset: usize) -> WinHeader {
     WinHeader {
-        
+
     }
 }
 
@@ -151,7 +151,7 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     }
     let toffset = coff_header.optional_header_size as usize + offset;
     println!("TODO: finish parsing PE executable files.\n");
-    prog::build_program_from_binary(bytes, Some(32), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine)))
+    prog::build_program_from_binary(bytes, Some(32), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine).to_string()))
     // Program {
 
     // }

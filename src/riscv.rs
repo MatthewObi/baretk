@@ -7,13 +7,18 @@ struct Register(u8);
 impl Register {
     const ZERO: Register = Register(0x0);
     const RA: Register = Register(0x1);
+    const COUNT: usize = Self::RA.0 as usize + 1;
 
-    fn name(self) -> String {
-        String::from(match self {
-            Self::ZERO => "Zero",
-            Self::RA => "ra",
-            _ => "?",
-        })
+    const REG_NAMES: [&'static str; Self::COUNT] = [
+        "Zero",
+        "ra"
+    ];
+
+    fn name(self) -> &'static str {
+        if (self.0 as usize) < Self::REG_NAMES.len() {
+            return Self::REG_NAMES[self.0 as usize]
+        }
+        "?"
     }
 }
 
