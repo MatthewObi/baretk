@@ -15,102 +15,108 @@ mod x86;
 mod riscv;
 
 // An objdump-like utility.
-fn cmd_dump(in_file: &String, out_file: Option<&String>) {
-    let output = dump::dump_program(&prog::load_program_from_file(in_file).unwrap());
-    if out_file.is_some() {
-        let out = out_file.unwrap();
-        let mut file = match File::open(out) {
-            Ok(file) => file,
-            Err(error) => {
-                eprintln!("Error opening file {}: {}", out, error);
+fn cmd_dump(args: Vec<String>) {
+    if let Some(in_file) = args.get(0) {
+        let out_file = args.get(1);
+        let output = dump::dump_program(&prog::load_program_from_file(in_file).unwrap());
+        if out_file.is_some() {
+            let out = out_file.unwrap();
+            let mut file = match File::open(out) {
+                Ok(file) => file,
+                Err(error) => {
+                    eprintln!("Error opening file {}: {}", out, error);
+                    return;
+                }
+            };
+            if let Err(error) = file.write(output.as_bytes()) {
+                eprintln!("Error writing file {}: {}", out, error);
                 return;
             }
-        };
-        if let Err(error) = file.write(output.as_bytes()) {
-            eprintln!("Error writing file {}: {}", out, error);
-            return;
+        }
+        else {
+            println!("{}", output);
         }
     }
     else {
-        println!("{}", output);
+        eprintln!("Usage: baretk dump <in_file> [out_file]");
     }
 }
 
-fn cmd_disassemble(in_file: &String, out_file: Option<&String>) {
-    let mut file = match File::open(in_file) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("Error opening file {}: {}", in_file, error);
-            return;
-        }
-    };
-
-    let mut contents: Vec<u8> = vec![];
-    if let Err(error) = file.read_to_end(&mut contents) {
-        eprintln!("Error reading file {}: {}", in_file, error);
-        return;
-    }
-
-    let disassembly = dis::disassemble(&contents);
-    if out_file.is_some() {
-        let out = out_file.unwrap();
-        let mut file = match File::open(out) {
+fn cmd_disassemble(args: Vec<String>) {
+    if let Some(in_file) = args.get(0) {
+        let out_file = args.get(1);
+        let mut file = match File::open(in_file) {
             Ok(file) => file,
             Err(error) => {
-                eprintln!("Error opening file {}: {}", out, error);
+                eprintln!("Error opening file {}: {}", in_file, error);
                 return;
             }
         };
-        if let Err(error) = file.write(disassembly.as_bytes()) {
-            eprintln!("Error writing file {}: {}", out, error);
+
+        let mut contents: Vec<u8> = vec![];
+        if let Err(error) = file.read_to_end(&mut contents) {
+            eprintln!("Error reading file {}: {}", in_file, error);
             return;
+        }
+
+        let disassembly = dis::disassemble(&contents);
+        if out_file.is_some() {
+            let out = out_file.unwrap();
+            let mut file = match File::open(out) {
+                Ok(file) => file,
+                Err(error) => {
+                    eprintln!("Error opening file {}: {}", out, error);
+                    return;
+                }
+            };
+            if let Err(error) = file.write(disassembly.as_bytes()) {
+                eprintln!("Error writing file {}: {}", out, error);
+                return;
+            }
+        }
+        else {
+            println!("{}", disassembly);
         }
     }
     else {
-        println!("{}", disassembly);
+        eprintln!("Usage: baretk dis <in_file> [out_file]");
     }
 }
 
 fn cmd_help() {
     println!("Available commands:");
-    println!("    baretk dis");
-    println!("    baretk dump");
-    println!("    baretk help");
+    for cmd in COMMANDS {
+        println!("    baretk {} - {}", cmd.name, cmd.desc);
+    }
+    println!("    baretk help - Prints this help.");
 }
 
-fn main() {
-    let args: Vec<_> = env::args().collect();
+struct Command {
+    name: &'static str,
+    desc: &'static str,
+    func: fn(Vec<String>),
+}
 
-    if args.len() < 2 {
-        eprintln!("Usage: baretk <subcommand>");
+const COMMANDS: &[Command] = &[
+    Command { name: "dis", desc: "Disassembles an input binary.", func: cmd_disassemble },
+    Command { name: "dump", desc: "Dumps information from an input binary.", func: cmd_dump }
+];
+
+fn main() {
+    let mut args = env::args();
+    args.next().expect("program");
+
+    if let Some(command) = args.next() {
+        if let Some(cmd) = COMMANDS.iter().find(|cmd| cmd.name == command.as_str()) {
+            (cmd.func)(args.collect());
+            return;
+        }
+        cmd_help();
         return;
     }
-
-    match args[1].as_str() {
-        "dis" => {
-            if args.len() < 3 {
-                eprintln!("Usage: baretk dis <input> [output]");
-                return;
-            }
-            else if args.len() < 4 {
-                cmd_disassemble(&args[2], None);
-            }
-            else {
-                cmd_disassemble(&args[2], Some(&args[3]));
-            }
-        }
-        "dump" => {
-            if args.len() < 3 {
-                eprintln!("Usage: baretk dump <input> [output]");
-                return;
-            }
-            else if args.len() < 4 {
-                cmd_dump(&args[2], None);
-            }
-            else {
-                cmd_dump(&args[2], Some(&args[3]));
-            }
-        }
-        _ => cmd_help(),
+    else {
+        eprintln!("Usage: baretk <command>");
+        cmd_help();
+        return;
     }
 }
