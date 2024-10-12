@@ -41,3 +41,35 @@ pub fn read_u32_to_u64_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8
 pub fn i32_sign(x: i32) -> &'static str {
     if x < 0 { "-" } else { "+" }
 }
+
+pub trait BitExtr {
+    fn bextr(self, start: u32, length: u32) -> Self;
+}
+
+impl BitExtr for u32 {
+    fn bextr(self, start: u32, length: u32) -> Self {
+        assert!(start < Self::BITS && length < Self::BITS);
+        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    }
+}
+
+impl BitExtr for u16 {
+    fn bextr(self, start: u32, length: u32) -> Self {
+        assert!(start < Self::BITS && length < Self::BITS);
+        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    }
+}
+
+impl BitExtr for i32 {
+    fn bextr(self, start: u32, length: u32) -> Self {
+        assert!(start < Self::BITS && length < Self::BITS);
+        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    }
+}
+
+impl BitExtr for i16 {
+    fn bextr(self, start: u32, length: u32) -> Self {
+        assert!(start < Self::BITS && length < Self::BITS);
+        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    }
+}

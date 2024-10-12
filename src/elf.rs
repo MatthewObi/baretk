@@ -66,6 +66,7 @@ impl MachineType {
     const X86       : MachineType = MachineType(0x3);
     const ARM       : MachineType = MachineType(0x28);
     const AMD64     : MachineType = MachineType(0x3e);
+    const RISCV     : MachineType = MachineType(0xf3);
 }
 
 fn machine_type_string(t: u16) -> &'static str {
@@ -75,6 +76,7 @@ fn machine_type_string(t: u16) -> &'static str {
         MachineType::X86     => "x86",
         MachineType::AMD64   => "amd64",
         MachineType::ARM     => "arm",
+        MachineType::RISCV   => "riscv",
         _ => "unknown",
     }
 }
@@ -126,7 +128,7 @@ fn read_common_header_32(bytes: &Vec<u8>, endianness: u8) -> HeaderCommon {
 fn read_common_header_64(bytes: &Vec<u8>, endianness: u8) -> HeaderCommon {
     HeaderCommon {
         e_type: read_u16_from_u8_vec(bytes, 0x10, endianness),
-        e_machine: read_u16_from_u8_vec(bytes, 0x10, endianness),
+        e_machine: read_u16_from_u8_vec(bytes, 0x12, endianness),
         e_version: read_u32_from_u8_vec(bytes, 0x14,endianness),
         e_entry: read_u64_from_u8_vec(bytes, 0x18, endianness),
         e_phoff: read_u64_from_u8_vec(bytes, 0x20, endianness),
@@ -304,9 +306,9 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         read_common_header_64(bytes, header.data)
     };
-    // println!("{} file, {}, version {}",
+    // println!("{} file, {} (0x{:02X}), version {}",
     //     elf_file_type_string(common_header.e_type),
-    //     machine_type_string(common_header.e_machine),
+    //     machine_type_string(common_header.e_machine), common_header.e_machine,
     //     common_header.e_version);
     // println!("entry point = 0x{:08x}", common_header.e_entry);
     // println!("program header = 0x{:08x}", common_header.e_phoff);
