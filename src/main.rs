@@ -83,6 +83,52 @@ fn cmd_disassemble(args: Vec<String>) {
     }
 }
 
+fn cmd_strings(args: Vec<String>) {
+    if let Some(in_file) = args.get(0) {
+        let out_file = args.get(1);
+        let mut file = match File::open(in_file) {
+            Ok(file) => file,
+            Err(error) => {
+                eprintln!("Error opening file {}: {}", in_file, error);
+                return;
+            }
+        };
+
+        let mut contents: Vec<u8> = vec![];
+        if let Err(error) = file.read_to_end(&mut contents) {
+            eprintln!("Error reading file {}: {}", in_file, error);
+            return;
+        }
+
+        let strings = query::get_strings(&contents);
+        if out_file.is_some() {
+            let out = out_file.unwrap();
+            let mut file = match File::open(out) {
+                Ok(file) => file,
+                Err(error) => {
+                    eprintln!("Error opening file {}: {}", out, error);
+                    return;
+                }
+            };
+            for str in strings {
+                if let Err(error) = file.write((str + "\n").as_bytes()) {
+                    eprintln!("Error writing file {}: {}", out, error);
+                    return;
+                }
+            }
+        }
+        else {
+            println!("ASCII strings found in {}:", in_file);
+            for str in strings {
+                println!(" {}", str);
+            }
+        }
+    }
+    else {
+        eprintln!("Usage: baretk strings <in_file> [out_file]");
+    }
+}
+
 fn cmd_help() {
     println!("Available commands:");
     for cmd in COMMANDS {
@@ -99,7 +145,8 @@ struct Command {
 
 const COMMANDS: &[Command] = &[
     Command { name: "dis", desc: "Disassembles an input binary.", func: cmd_disassemble },
-    Command { name: "dump", desc: "Dumps information from an input binary.", func: cmd_dump }
+    Command { name: "dump", desc: "Dumps information from an input binary.", func: cmd_dump },
+    Command { name: "strings", desc: "Prints strings found in an input binary.", func: cmd_strings },
 ];
 
 fn main() {
