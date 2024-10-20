@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::collections::HashMap;
 mod dis;
 mod query;
 mod prog;
@@ -14,17 +15,42 @@ mod arm;
 mod x86;
 mod riscv;
 
+struct ArgList {
+    named_args: HashMap<String, String>,
+    pos_args: Vec<String>
+}
+
+fn parse_cmd_args(args: Vec<String>) -> ArgList {
+    let mut named_args = HashMap::<String, String>::new();
+    let mut pos_args = Vec::<String>::new();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg.starts_with("--") {
+            named_args.insert(arg.strip_prefix("--").unwrap().to_string(), "".to_string());
+        }
+        else if arg.starts_with("-") {
+            if let Some(v) = it.next() {
+                named_args.insert(arg.strip_prefix("-").unwrap().to_string(), v.clone());
+            }
+        }
+        else {
+            pos_args.push(arg.clone())
+        }
+    }
+    ArgList { named_args, pos_args }
+}
+
 // An objdump-like utility.
-fn cmd_dump(args: Vec<String>) {
-    if let Some(in_file) = args.get(0) {
-        let out_file = args.get(1);
+fn cmd_dump(args: ArgList) {
+    if let Some(in_file) = args.pos_args.get(0) {
+        let out_file = args.pos_args.get(1);
         let output = dump::dump_program(&prog::load_program_from_file(in_file).unwrap());
         if out_file.is_some() {
             let out = out_file.unwrap();
-            let mut file = match File::open(out) {
+            let mut file = match File::create(out) {
                 Ok(file) => file,
                 Err(error) => {
-                    eprintln!("Error opening file {}: {}", out, error);
+                    eprintln!("Error creating file {}: {}", out, error);
                     return;
                 }
             };
@@ -42,9 +68,9 @@ fn cmd_dump(args: Vec<String>) {
     }
 }
 
-fn cmd_disassemble(args: Vec<String>) {
-    if let Some(in_file) = args.get(0) {
-        let out_file = args.get(1);
+fn cmd_disassemble(args: ArgList) {
+    if let Some(in_file) = args.pos_args.get(0) {
+        let out_file = args.pos_args.get(1);
         let mut file = match File::open(in_file) {
             Ok(file) => file,
             Err(error) => {
@@ -62,10 +88,10 @@ fn cmd_disassemble(args: Vec<String>) {
         let disassembly = dis::disassemble(&contents);
         if out_file.is_some() {
             let out = out_file.unwrap();
-            let mut file = match File::open(out) {
+            let mut file = match File::create(out) {
                 Ok(file) => file,
                 Err(error) => {
-                    eprintln!("Error opening file {}: {}", out, error);
+                    eprintln!("Error creating file {}: {}", out, error);
                     return;
                 }
             };
@@ -83,9 +109,9 @@ fn cmd_disassemble(args: Vec<String>) {
     }
 }
 
-fn cmd_strings(args: Vec<String>) {
-    if let Some(in_file) = args.get(0) {
-        let out_file = args.get(1);
+fn cmd_strings(args: ArgList) {
+    if let Some(in_file) = args.pos_args.get(0) {
+        let out_file = args.pos_args.get(1);
         let mut file = match File::open(in_file) {
             Ok(file) => file,
             Err(error) => {
@@ -100,13 +126,28 @@ fn cmd_strings(args: Vec<String>) {
             return;
         }
 
-        let strings = query::get_strings(&contents);
+        let min_len = if let Some(opt) = args.named_args.get("n") {
+            let res = opt.parse::<usize>();
+            if let Err(err) = res {
+                eprintln!("Can't convert \"{}\" to number: {}", opt, err);
+                return;
+            }
+            else { 
+                res.ok() 
+            }
+        } else {
+            None
+        }.unwrap_or(4);
+
+        let printable = args.named_args.contains_key("printable");
+
+        let strings = query::get_strings(&contents, min_len, printable);
         if out_file.is_some() {
             let out = out_file.unwrap();
-            let mut file = match File::open(out) {
+            let mut file = match File::create(out) {
                 Ok(file) => file,
                 Err(error) => {
-                    eprintln!("Error opening file {}: {}", out, error);
+                    eprintln!("Error creating file {}: {}", out, error);
                     return;
                 }
             };
@@ -126,6 +167,7 @@ fn cmd_strings(args: Vec<String>) {
     }
     else {
         eprintln!("Usage: baretk strings <in_file> [out_file]");
+        eprintln!("    -n <num> min. string length (default 4)");
     }
 }
 
@@ -140,7 +182,7 @@ fn cmd_help() {
 struct Command {
     name: &'static str,
     desc: &'static str,
-    func: fn(Vec<String>),
+    func: fn(ArgList),
 }
 
 const COMMANDS: &[Command] = &[
@@ -155,7 +197,7 @@ fn main() {
 
     if let Some(command) = args.next() {
         if let Some(cmd) = COMMANDS.iter().find(|cmd| cmd.name == command.as_str()) {
-            (cmd.func)(args.collect());
+            (cmd.func)(parse_cmd_args(args.collect()));
             return;
         }
         cmd_help();

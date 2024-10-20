@@ -16,10 +16,10 @@ pub fn get_file_type(bytes: &Vec<u8>) -> FileType {
     FileType::RawBinary
 }
 
-fn try_ascii_string(index: usize, bytes: &Vec<u8>) -> (Option<String>, usize) {
+fn try_ascii_string(index: usize, bytes: &Vec<u8>, min_len: usize, printable: bool) -> (Option<String>, usize) {
     let mut len = 0usize;
     while index + len < bytes.len() {
-        if bytes[index + len] == 0 {
+        if (printable && bytes[index + len] < 0x20u8) || bytes[index + len] == 0 {
             break;
         }
         else if bytes[index + len] <= 0x7fu8 {
@@ -30,7 +30,7 @@ fn try_ascii_string(index: usize, bytes: &Vec<u8>) -> (Option<String>, usize) {
             return (None, len + 1);
         }
     }
-    if len > 5 {
+    if len >= min_len {
         return (Some(String::from_utf8_lossy(&bytes[index..index + len]).into_owned()), len + 1);
     }
     else {
@@ -38,11 +38,11 @@ fn try_ascii_string(index: usize, bytes: &Vec<u8>) -> (Option<String>, usize) {
     }
 }
 
-pub fn get_strings(bytes: &Vec<u8>) -> Vec<String> {
+pub fn get_strings(bytes: &Vec<u8>, min_len: usize, printable: bool) -> Vec<String> {
     let mut index = 0usize;
     let mut strings = Vec::<String>::new();
     while index < bytes.len() {
-        let (str, size) = try_ascii_string(index, bytes);
+        let (str, size) = try_ascii_string(index, bytes, min_len, printable);
         if str.is_some() {
             strings.push(str.unwrap());
         }
