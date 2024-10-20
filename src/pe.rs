@@ -1,5 +1,8 @@
-use crate::prog::{self, Program};
-use crate::util::{LITTLE_ENDIAN, read_u16_from_u8_vec, read_u32_from_u8_vec, read_u64_from_u8_vec, read_u32_to_u64_from_u8_vec};
+use core::str;
+use std::collections::HashMap;
+
+use crate::prog::{Program, Section, Segment};
+use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_from_u8_vec, read_u64_from_u8_vec, LITTLE_ENDIAN, RWX_EXEC, RWX_WRITE, RWX_READ};
 
 const PE_OFFSET_OFFSET: usize = 0x3c;
 
@@ -41,6 +44,37 @@ fn get_machine_type_string(machine: u16) -> &'static str {
         MachineType::AMD64 => "amd64",
         _ => "?",
     }
+}
+
+const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
+const IMAGE_SCN_MEM_READ: u32 = 0x40000000;
+const IMAGE_SCN_MEM_WRITE: u32 = 0x80000000;
+
+fn get_rwx_perm(flags: u32) -> u8 {
+    let mut out = 0u8;
+    if (flags & IMAGE_SCN_MEM_EXECUTE) != 0 {
+        out |= RWX_EXEC;
+    }
+    if (flags & IMAGE_SCN_MEM_WRITE) != 0 {
+        out |= RWX_WRITE;
+    }
+    if (flags & IMAGE_SCN_MEM_READ) != 0 {
+        out |= RWX_READ;
+    }
+    out
+}
+
+fn get_name_from_section_header(hdr: &SectionHeader) -> String {
+    let mut s = String::new();
+    for c in hdr.name {
+        if c.is_ascii() && c != 0 {
+            s.push(c as char);
+        }
+        else {
+            return s;
+        }
+    }
+    s
 }
 
 #[derive(PartialEq)]
@@ -95,7 +129,21 @@ struct OptionalHeader {
 }
 
 struct WinHeader {
+    section_alignment: u32,
+    file_alignment: u32,
+}
 
+struct SectionHeader {
+    name: [u8; 8],
+    virtual_size: u32,
+    virtual_addr: u32,
+    data_size: u32,
+    data_ptr: u32,
+    reloc_ptr: u32,
+    _line_num_ptr: u32,
+    _reloc_count: u16,
+    _line_num_count: u16,
+    characteristics: u32,
 }
 
 fn read_coff_header(bytes: &Vec<u8>, offset: usize) -> CoffHeader {
@@ -123,7 +171,58 @@ fn read_optional_header(bytes: &Vec<u8>, offset: usize) -> OptionalHeader {
 
 fn read_windows_header_32p(bytes: &Vec<u8>, offset: usize) -> WinHeader {
     WinHeader {
+        section_alignment: read_u32_from_u8_vec(bytes, offset+0x4, LITTLE_ENDIAN),
+        file_alignment: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
+    }
+}
 
+fn read_section_header_32(bytes: &Vec<u8>, offset: usize) -> SectionHeader {
+    SectionHeader {
+        name: bytes[offset..offset+8].try_into().expect("Bad array slice"),
+        virtual_size: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
+        virtual_addr: read_u32_from_u8_vec(bytes, offset+0xc, LITTLE_ENDIAN),
+        data_size: read_u32_from_u8_vec(bytes, offset+0x10, LITTLE_ENDIAN),
+        data_ptr: read_u32_from_u8_vec(bytes, offset+0x14, LITTLE_ENDIAN),
+        reloc_ptr: read_u32_from_u8_vec(bytes, offset+0x18, LITTLE_ENDIAN),
+        _line_num_ptr: read_u32_from_u8_vec(bytes, offset+0x1c, LITTLE_ENDIAN),
+        _reloc_count: read_u16_from_u8_vec(bytes, offset+0x20, LITTLE_ENDIAN),
+        _line_num_count: read_u16_from_u8_vec(bytes, offset+0x22, LITTLE_ENDIAN),
+        characteristics: read_u32_from_u8_vec(bytes, offset+0x24, LITTLE_ENDIAN),
+    }
+}
+
+fn build_section_table(bytes: &Vec<u8>, _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> HashMap<String, Section> {
+    let mut hashmap = HashMap::<String, Section>::new();
+    for (k, v) in section_headers {
+        hashmap.insert(k.to_string(), Section {
+            addr: v.data_ptr as u64,
+            bytes: bytes[v.data_ptr as usize..(v.data_ptr as usize + v.data_size as usize)].to_vec()
+        });
+    }
+    hashmap
+}
+
+fn build_program_table(_bytes: &Vec<u8>, _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> Vec<Segment> {
+    let mut v = Vec::<Segment>::new();
+    for (_, entry) in section_headers {
+        v.push(Segment {
+            perm: get_rwx_perm(entry.characteristics),
+            offset: entry.data_ptr as u64,
+            paddr: entry.data_ptr as u64,
+            vaddr: entry.virtual_addr as u64,
+            size: entry.data_size as usize,
+        });
+    }
+    v
+}
+
+fn build_program(bytes: &Vec<u8>, coff_header: &CoffHeader, opt_header: Option<OptionalHeader>, section_headers: &HashMap<String, SectionHeader>) -> Program {
+    Program {
+        bits: if let Some(opt) = opt_header { match opt.magic { 0x10b => 32, 0x20b => 64, _ => 32} } else { 32 },
+        endianess: LITTLE_ENDIAN,
+        machine_type: get_machine_type_string(coff_header.machine).to_string(),
+        program_table: build_program_table(bytes, coff_header, section_headers),
+        section_table: build_section_table(bytes, coff_header, section_headers)
     }
 }
 
@@ -131,7 +230,6 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     let b: &[u8; 4] = (&bytes[PE_OFFSET_OFFSET..PE_OFFSET_OFFSET + 4]).try_into().unwrap();
     let offset = u32::from_le_bytes(*b) as usize;
     let coff_header = read_coff_header(bytes, offset);
-    println!("{:?}", coff_header);
     println!("{} machine ({}), {} section(s)", get_machine_type_string(coff_header.machine), characteristics_string(coff_header.characteristics),
         coff_header.num_sections);
     let optional_header = if coff_header.optional_header_size > 0 {
@@ -139,8 +237,7 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         None
     };
-    if optional_header.is_some() {
-        let opt = optional_header.unwrap();
+    if let Some(ref opt) = optional_header {
         println!("{} v{}.{}, base_addr=0x{:08x} code_size=0x{:08x} entry_point=0x{:08x}", 
             match opt.magic { 0x10b => "PE32", 0x20b => "PE32+", _ => ""},
             opt.major_link_ver,
@@ -149,9 +246,18 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
             opt.code_size,
             opt.entry_point);
     }
-    let toffset = coff_header.optional_header_size as usize + offset;
+    let toffset = coff_header.optional_header_size as usize + offset + 0x18;
+    println!("Section table: 0x{:08x}", toffset);
+    let mut section_table = HashMap::<String, SectionHeader>::new();
+    for i in 0..coff_header.num_sections {
+        let section_header = read_section_header_32(bytes, toffset+(i as usize * 40));
+        let section_name = get_name_from_section_header(&section_header);
+        println!("{:<8} 0x{:<08x}, 0x{:<08x}", section_name, section_header.virtual_addr, section_header.virtual_size);
+        section_table.insert(section_name.to_string(), section_header);
+    }
     println!("TODO: finish parsing PE executable files.\n");
-    prog::build_program_from_binary(bytes, Some(32), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine).to_string()))
+    // prog::build_program_from_binary(bytes, Some(bits), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine).to_string()))
+    build_program(bytes, &coff_header, optional_header, &section_table)
     // Program {
 
     // }

@@ -2,6 +2,10 @@
 pub const LITTLE_ENDIAN: u8 = 0x1;
 pub const BIG_ENDIAN: u8 = 0x2;
 
+pub const RWX_EXEC: u8 = 0x1;
+pub const RWX_WRITE: u8 = 0x2;
+pub const RWX_READ: u8 = 0x4;
+
 pub fn read_u16_from_u8_vec(bytes: &Vec<u8>, start: usize, endianness: u8) -> u16 {
     let b: &[u8; 2] = (&bytes[start..start+2]).try_into().unwrap();
     match endianness { 
