@@ -47,33 +47,33 @@ pub fn i32_sign(x: i32) -> &'static str {
 }
 
 pub trait BitExtr {
-    fn bextr(self, start: u32, length: u32) -> Self;
+    fn bextr(self, start: u32, stop: u32) -> Self;
 }
 
 impl BitExtr for u32 {
-    fn bextr(self, start: u32, length: u32) -> Self {
-        assert!(start < Self::BITS && length < Self::BITS);
-        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    fn bextr(self, start: u32, stop: u32) -> Self {
+        assert!(start < Self::BITS && stop <= start);
+        (self << (Self::BITS - start - 1)) >> (Self::BITS - (start - stop) - 1)
     }
 }
 
 impl BitExtr for u16 {
-    fn bextr(self, start: u32, length: u32) -> Self {
-        assert!(start < Self::BITS && length < Self::BITS);
-        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    fn bextr(self, start: u32, stop: u32) -> Self {
+        assert!(start < Self::BITS && stop <= start);
+        (self << (Self::BITS - start - 1)) >> (Self::BITS - (start - stop) - 1)
     }
 }
 
 impl BitExtr for i32 {
-    fn bextr(self, start: u32, length: u32) -> Self {
-        assert!(start < Self::BITS && length < Self::BITS);
-        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    fn bextr(self, start: u32, stop: u32) -> Self {
+        assert!(start < Self::BITS && stop <= start);
+        (self << (Self::BITS - start - 1)) >> (Self::BITS - (start - stop) - 1)
     }
 }
 
 impl BitExtr for i16 {
-    fn bextr(self, start: u32, length: u32) -> Self {
-        assert!(start < Self::BITS && length < Self::BITS);
-        (self << (Self::BITS - start)) >> (Self::BITS - length)
+    fn bextr(self, start: u32, stop: u32) -> Self {
+        assert!(start < Self::BITS && stop <= start);
+        (self << (Self::BITS - start - 1)) >> (Self::BITS - (start - stop) - 1)
     }
 }
