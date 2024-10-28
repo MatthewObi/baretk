@@ -97,12 +97,26 @@ enum Operation {
     Sll,
     Srl,
     Sra,
+    Mul,
     Addi,
+    Addiw,
     Andi,
     Ori,
     Xori,
     Slti,
     Sltui,
+    Slli,
+    Slliw,
+    Srli,
+    Srliw,
+    Srai,
+    Sraiw,
+    Addw,
+    Subw,
+    Sllw,
+    Srlw,
+    Sraw,
+    Mulw,
     Auipc,
     Lui,
     Li,
@@ -216,12 +230,30 @@ impl Instruction {
             Operation::Sll   => format!("sll {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
             Operation::Srl   => format!("srl {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
             Operation::Sra   => format!("sra {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Mul   => format!("mul {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
             Operation::Addi  => format!("addi {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Xori  => format!("xori {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Ori   => format!("ori {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Andi  => format!("andi {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Slti  => format!("slti {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Sltui => format!("sltui {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Addiw => if self.imm.is_zero() {
+                format!("sext.w {}, {}", self.rd.print(), self.rs1.print())
+            } else {
+                format!("addiw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print())
+            },
+            Operation::Slli  => format!("slli {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srli  => format!("srli {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srai  => format!("srai {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Slliw => format!("slliw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srliw => format!("srliw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Sraiw => format!("sraiw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Addw  => format!("addw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Subw  => format!("subw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sllw  => format!("sllw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Srlw  => format!("srlw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sraw  => format!("sraw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Mulw  => format!("mulw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
             Operation::Lbu   => format!("lbu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Lhu   => format!("lhu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
             Operation::Lwu   => format!("lwu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
@@ -318,6 +350,13 @@ fn instr_op_rs1_rs2_imm12_s(op: Operation, ins: u32, offset: usize, ins_size: u8
     Instruction { operation: op, rd: Operand::Nothing, rs1: Operand::Reg(rs1), rs2: Operand::Reg(rs2), rs3: Operand::Nothing, imm: Operand::ImmS32(imm), offset, ins_size }
 }
 
+fn instr_op_rd_rs1_shamt(op: Operation, ins: u32, offset: usize, ins_size: u8) -> Instruction {
+    let rd = rd(ins) as u8;
+    let rs1 = rs1(ins) as u8;
+    let imm = shamt(ins);
+    Instruction { operation: op, rd: Operand::Reg(rd), rs1: Operand::Reg(rs1), rs2: Operand::Nothing, rs3: Operand::Nothing, imm: Operand::ImmU32(imm), offset, ins_size }
+}
+
 fn opcode(ins: u32) -> u32 {
     ins & 0x7f
 }
@@ -346,6 +385,10 @@ fn imm20(ins: u32) -> i32 {
     (ins as i32) >> 12
 }
 
+fn shamt(ins: u32) -> u32 {
+    (ins >> 20) & 0b11111
+}
+
 fn jimm20(ins: u32) -> i32 {
     ((((ins.bextr(31, 31) as i32) << 20) as u32) | (ins.bextr(30, 21) << 1)
     | (ins.bextr(20, 20) << 11) | (ins.bextr(19, 12) << 12)) as i32
@@ -362,6 +405,10 @@ fn imm12(ins: u32) -> i32 {
 
 fn imm12_s(ins: u32) -> i32 {
     ((((ins as i32).bextr(31, 25) << 11) as u32) | (ins.bextr(11, 7))) as i32
+}
+
+fn csr(ins: u32) -> u32 {
+    ins.bextr(31, 20)
 }
 
 fn instr_op_rd_imm20(op: Operation, ins: u32, offset: usize) -> Instruction {
@@ -381,6 +428,13 @@ fn instr_op_rs1_rs2_branch(op: Operation, ins: u32, offset: usize) -> Instructio
     let rs2 = rs2(ins) as u8;
     let imm = branch(ins);
     Instruction { operation: op, rd: Operand::Nothing, rs1: Operand::Reg(rs1), rs2: Operand::Reg(rs2), rs3: Operand::Nothing, imm: Operand::ImmS32(imm), offset, ins_size: 4 }
+}
+
+fn instr_op_rs1_csr(op: Operation, ins: u32, offset: usize) -> Instruction {
+    let rd = rd(ins) as u8;
+    let rs1 = rs1(ins) as u8;
+    let imm = csr(ins);
+    Instruction { operation: op, rd: Operand::Reg(rd), rs1: Operand::Reg(rs1), rs2: Operand::Nothing, rs3: Operand::Nothing, imm: Operand::ImmU32(imm), offset, ins_size: 4 }
 }
 
 fn disassemble_lui(ins: u32, offset: usize) -> Instruction {
@@ -427,6 +481,10 @@ fn disassemble_addi(ins: u32, offset: usize) -> Instruction {
     instr_op_rd_rs1_imm12(Operation::Addi, ins, offset, 4)
 }
 
+fn disassemble_addiw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_imm12(Operation::Addiw, ins, offset, 4)
+}
+
 fn disassemble_xori(ins: u32, offset: usize) -> Instruction {
     instr_op_rd_rs1_imm12(Operation::Xori, ins, offset, 4)
 }
@@ -445,6 +503,30 @@ fn disassemble_sltui(ins: u32, offset: usize) -> Instruction {
 
 fn disassemble_andi(ins: u32, offset: usize) -> Instruction {
     instr_op_rd_rs1_imm12(Operation::Andi, ins, offset, 4)
+}
+
+fn disassemble_slli(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Slli, ins, offset, 4)
+}
+
+fn disassemble_slliw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Slliw, ins, offset, 4)
+}
+
+fn disassemble_srli(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Srli, ins, offset, 4)
+}
+
+fn disassemble_srliw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Srliw, ins, offset, 4)
+}
+
+fn disassemble_srai(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Srai, ins, offset, 4)
+}
+
+fn disassemble_sraiw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_shamt(Operation::Sraiw, ins, offset, 4)
 }
 
 fn disassemble_add(ins: u32, offset: usize) -> Instruction {
@@ -485,6 +567,34 @@ fn disassemble_srl(ins: u32, offset: usize) -> Instruction {
 
 fn disassemble_sra(ins: u32, offset: usize) -> Instruction {
     instr_op_rd_rs1_rs2(Operation::Sra, ins, offset, 4)
+}
+
+fn disassemble_mul(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Mul, ins, offset, 4)
+}
+
+fn disassemble_addw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Addw, ins, offset, 4)
+}
+
+fn disassemble_subw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Subw, ins, offset, 4)
+}
+
+fn disassemble_sllw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Sllw, ins, offset, 4)
+}
+
+fn disassemble_srlw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Srlw, ins, offset, 4)
+}
+
+fn disassemble_sraw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Sraw, ins, offset, 4)
+}
+
+fn disassemble_mulw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rd_rs1_rs2(Operation::Mulw, ins, offset, 4)
 }
 
 fn disassemble_lb(ins: u32, offset: usize) -> Instruction {
@@ -531,6 +641,10 @@ fn disassemble_sd(ins: u32, offset: usize) -> Instruction {
     instr_op_rs1_rs2_imm12_s(Operation::Sd, ins, offset, 4)
 }
 
+fn disassemble_csrrw(ins: u32, offset: usize) -> Instruction {
+    instr_op_rs1_csr(Operation::Sd, ins, offset)
+}
+
 fn disassemble_32(ins: u32, offset: usize) -> Option<Instruction> {
     let opcode = opcode(ins);
     let funct3 = funct3(ins);
@@ -574,11 +688,29 @@ fn disassemble_32(ins: u32, offset: usize) -> Option<Instruction> {
         0b0010011 => {
             match funct3 {
                 0b000 => Some(disassemble_addi(ins, offset)),
+                0b001 => Some(disassemble_slli(ins, offset)),
                 0b010 => Some(disassemble_slti(ins, offset)),
                 0b011 => Some(disassemble_sltui(ins, offset)),
                 0b100 => Some(disassemble_xori(ins, offset)),
+                0b101 => match funct7(ins) {
+                    0b0000000 => Some(disassemble_srli(ins, offset)),
+                    0b0100000 => Some(disassemble_srai(ins, offset)),
+                    _ => None
+                },
                 0b110 => Some(disassemble_ori(ins, offset)),
                 0b111 => Some(disassemble_andi(ins, offset)),
+                _ => None
+            }
+        },
+        0b0011011 => {
+            match funct3 {
+                0b000 => Some(disassemble_addiw(ins, offset)),
+                0b001 => Some(disassemble_slliw(ins, offset)),
+                0b101 => match funct7(ins) {
+                    0b0000000 => Some(disassemble_srliw(ins, offset)),
+                    0b0100000 => Some(disassemble_sraiw(ins, offset)),
+                    _ => None
+                },
                 _ => None
             }
         },
@@ -586,6 +718,7 @@ fn disassemble_32(ins: u32, offset: usize) -> Option<Instruction> {
             match funct3 {
                 0b000 => match funct7(ins) {
                     0b0000000 => Some(disassemble_add(ins, offset)),
+                    0b0000001 => Some(disassemble_mul(ins, offset)),
                     0b0100000 => Some(disassemble_sub(ins, offset)),
                     _ => None
                 },
@@ -602,7 +735,30 @@ fn disassemble_32(ins: u32, offset: usize) -> Option<Instruction> {
                 0b111 => Some(disassemble_and(ins, offset)),
                 _ => None
             }
-        }
+        },
+        0b0111011 => {
+            match funct3 {
+                0b000 => match funct7(ins) {
+                    0b0000000 => Some(disassemble_addw(ins, offset)),
+                    0b0000001 => Some(disassemble_mulw(ins, offset)),
+                    0b0100000 => Some(disassemble_subw(ins, offset)),
+                    _ => None
+                },
+                0b001 => Some(disassemble_sllw(ins, offset)),
+                0b101 => match funct7(ins) {
+                    0b0000000 => Some(disassemble_srlw(ins, offset)),
+                    0b0100000 => Some(disassemble_sraw(ins, offset)),
+                    _ => None
+                },
+                _ => None
+            }
+        },
+        0b1110011 => {
+            match funct3 {
+                0b001 => Some(disassemble_csrrw(ins, offset)),
+                _ => None
+            }
+        },
         _ => None
     }
 }
@@ -693,6 +849,18 @@ fn disassemble_c_addi(ins: u16, offset: usize) -> Instruction {
     Instruction { operation: Operation::Addi, rd: Operand::Reg(rd), rs1: Operand::Reg(rd), rs2: Operand::Nothing, rs3: Operand::Nothing, imm: Operand::ImmS16(imm), offset, ins_size: 2 }
 }
 
+fn disassemble_c_subw(ins: u16, offset: usize) -> Instruction {
+    let rd = rd_rs2_p(ins) as u8 + Register::S0.0;
+    let rs = rs1_p(ins) as u8 + Register::S0.0;
+    Instruction { operation: Operation::Subw, rd: Operand::Reg(rd), rs1: Operand::Reg(rd), rs2: Operand::Reg(rs), rs3: Operand::Nothing, imm: Operand::Nothing, offset, ins_size: 2 }
+}
+
+fn disassemble_c_addw(ins: u16, offset: usize) -> Instruction {
+    let rd = rd_rs2_p(ins) as u8 + Register::S0.0;
+    let rs = rs1_p(ins) as u8 + Register::S0.0;
+    Instruction { operation: Operation::Addw, rd: Operand::Reg(rd), rs1: Operand::Reg(rd), rs2: Operand::Reg(rs), rs3: Operand::Nothing, imm: Operand::Nothing, offset, ins_size: 2 }
+}
+
 fn disassemble_c_jr(ins: u16, offset: usize) -> Instruction {
     let rs1 = rd(ins as u32) as u8;
     Instruction { operation: Operation::Jalr, rd: Operand::Reg(Register::ZERO.0), rs1: Operand::Reg(rs1), rs2: Operand::Nothing, rs3: Operand::Nothing, imm: Operand::ImmS16(0), offset, ins_size: 2 }
@@ -762,12 +930,20 @@ fn disassemble_16(ins: u16, offset: usize) -> Option<Instruction> {
                 _ => Some(disassemble_c_lui(ins, offset)),
             },
             0b100 => match ins.bextr(11, 10) {
-                0b11 => match ins.bextr(6, 5) {
-                    0b00 => Some(disassemble_c_sub(ins, offset)),
-                    0b01 => Some(disassemble_c_xor(ins, offset)),
-                    0b10 => Some(disassemble_c_or(ins, offset)),
-                    0b11 => Some(disassemble_c_and(ins, offset)),
-                    _ => None,
+                0b11 => match ins.bextr(12, 12) {
+                    0b0 => match ins.bextr(6, 5) {
+                        0b00 => Some(disassemble_c_sub(ins, offset)),
+                        0b01 => Some(disassemble_c_xor(ins, offset)),
+                        0b10 => Some(disassemble_c_or(ins, offset)),
+                        0b11 => Some(disassemble_c_and(ins, offset)),
+                        _ => None,
+                    },
+                    0b1 => match ins.bextr(6, 5) {
+                        0b00 => Some(disassemble_c_subw(ins, offset)),
+                        0b01 => Some(disassemble_c_addw(ins, offset)),
+                        _ => None,
+                    },
+                    _ => None
                 },
                 _ => None,
             },
