@@ -1,3 +1,4 @@
+use crate::dis::DisassemblySection;
 use crate::prog::{Section, Program};
 use crate::util::{i32_sign, BitExtr};
 
@@ -137,7 +138,7 @@ enum Operation {
     Sh,
     Sw,
     Sd,
-    Ret,
+    Unknown,
 }
 
 #[derive(Clone, Copy)]
@@ -204,7 +205,7 @@ impl Operand {
 }
 
 #[derive(Clone, Copy)]
-struct Instruction {
+pub struct Instruction {
     operation: Operation,
     rd: Operand,
     rs1: Operand,
@@ -216,7 +217,7 @@ struct Instruction {
 }
 
 impl Instruction {
-    fn print(self) -> String {
+    pub fn print(self) -> String {
         match self.operation {
             Operation::Add   => format!("add {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
             Operation::Sub   => format!("sub {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
@@ -321,9 +322,17 @@ impl Instruction {
             Operation::Bge   => format!("bge {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
             Operation::Bltu  => format!("bltu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
             Operation::Bgeu  => format!("bgeu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
-            Operation::Ret   => format!("ret"),
+            Operation::Unknown => format!("???"),
             _ => format!("unknown")
         }
+    }
+
+    pub fn offset(self) -> usize {
+        self.offset
+    }
+
+    pub fn size(self) -> usize {
+        self.ins_size as usize
     }
 }
 
@@ -980,8 +989,8 @@ fn disassemble_instruction(bytes: &[u8], offset: usize) -> Option<Instruction> {
     disassemble_16(u16::from_le_bytes(bytes[offset..offset+2].try_into().unwrap()), offset)
 }
 
-pub fn disassemble_riscv(section: &Section, program: &Program) -> String {
-    let mut out = String::new();
+pub fn disassemble_riscv(section: &Section, section_name: &String, program: &Program) -> DisassemblySection {
+    let mut instrs = Vec::<Instruction>::new();
     let mut offset: usize = 0;
     let limit = 32usize;
     let bytes = section.bytes.as_slice();
@@ -989,22 +998,34 @@ pub fn disassemble_riscv(section: &Section, program: &Program) -> String {
         let instr = disassemble_instruction(bytes, offset);
         if instr.is_some() {
             let ins = instr.unwrap();
-            if ins.ins_size == 4 {
-                out += format!("{:24} ({:02X} {:02X} {:02X} {:02X})\n", ins.print(), bytes[ins.offset], bytes[ins.offset + 1], bytes[ins.offset + 2], bytes[ins.offset + 3]).as_str()
-            } else {
-                out += format!("{:24} ({:02X} {:02X})\n", ins.print(), bytes[ins.offset], bytes[ins.offset + 1]).as_str()
-            }
             offset += ins.ins_size as usize;
+            instrs.push(ins);
         }
         else if offset + 4 < limit && (u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap()) & 3) == 3 {
-            out += format!("{:24} ({:02X} {:02X} {:02X} {:02X})\n", "???", bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]).as_str();
+            instrs.push(Instruction { operation: Operation::Unknown,
+                rd: Operand::Nothing,
+                rs1: Operand::Nothing,
+                rs2: Operand::Nothing,
+                rs3: Operand::Nothing,
+                imm: Operand::Nothing,
+                offset,
+                ins_size: 4});
             offset += 4;
         }
         else {
-            out += format!("{:24} ({:02X} {:02X})\n", "???", bytes[offset], bytes[offset + 1]).as_str();
+            instrs.push(Instruction { operation: Operation::Unknown,
+                rd: Operand::Nothing,
+                rs1: Operand::Nothing,
+                rs2: Operand::Nothing,
+                rs3: Operand::Nothing,
+                imm: Operand::Nothing,
+                offset,
+                ins_size: 2});
             offset += 2;
         }
     }
-    println!("{}", out);
-    format!("TODO: RISC-V stuff")
+    DisassemblySection {
+        section_name: section_name.clone(),
+        instructions: crate::dis::InstructionListing::Rv(instrs),
+    }
 }

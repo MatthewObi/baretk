@@ -1,3 +1,4 @@
+use crate::dis::DisassemblySection;
 use crate::prog::{Section, Program};
 use crate::util::i32_sign;
 
@@ -129,6 +130,7 @@ enum Operation {
     Pop,
     Ret,
     Call,
+    Unknown,
 }
 
 const PREFIX_REX_W: u8 = 1;
@@ -262,7 +264,7 @@ impl Operand {
 }
 
 #[derive(Clone, Copy)]
-struct Instruction {
+pub struct Instruction {
     operation: Operation,
     reg1: Operand,
     reg2: Operand,
@@ -271,7 +273,7 @@ struct Instruction {
 }
 
 impl Instruction {
-    fn print(self) -> String {
+    pub fn print(self) -> String {
         match self.operation {
             Operation::Add  => format!("add {}, {}", self.reg1.print(), self.reg2.print()),
             Operation::Adc  => format!("adc {}, {}", self.reg1.print(), self.reg2.print()),
@@ -287,8 +289,17 @@ impl Instruction {
             Operation::Nop  => format!("nop"),
             Operation::Ret  => format!("ret"),
             Operation::Call => format!("call {}", self.reg1.print()),
+            Operation::Unknown => format!("(bad)"),
             _ => format!("unknown")
         }
+    }
+
+    pub fn offset(self) -> usize {
+        self.offset
+    }
+
+    pub fn size(self) -> usize {
+        self.ins_size as usize
     }
 }
 
@@ -625,7 +636,7 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize, prefix: u8) -> Optio
     }
 }
 
-pub fn disassemble_x86(section: &Section, program: &Program) -> String {
+pub fn disassemble_x86(section: &Section, section_name: &String, program: &Program) -> DisassemblySection {
     let mut offset = 0x0;
     let bytes = &[
         0x50u8,
@@ -635,22 +646,26 @@ pub fn disassemble_x86(section: &Section, program: &Program) -> String {
         0x90,
         0xc3
     ];
+    let mut instrs = Vec::<Instruction>::new();
     // let bytes = section.bytes.as_slice();
     while offset < bytes.len() { 
         let res = disassemble_x86_instruction(bytes, offset, 0);
         if res.is_some() {
             let ins = res.unwrap();
-            print!("{:<08x}: {} ; ", offset, ins.print());
-            for i in 0..ins.ins_size {
-                print!("0x{:02x} ", bytes[ins.offset + i as usize]);
-            }
-            println!("");
             offset += ins.ins_size as usize;
+            instrs.push(ins);
         }
         else {
-            println!("{:<08x}: (bad) ; 0x{:02x}", offset, bytes[offset]);
+            instrs.push(Instruction {
+                operation: Operation::Unknown, 
+                reg1: Operand::Nothing, 
+                reg2: Operand::Nothing, 
+                offset, ins_size: 1});
             offset += 1;
         }
     }
-    format!("TODO: x86 stuff")
+    DisassemblySection {
+        section_name: section_name.clone(),
+        instructions: crate::dis::InstructionListing::X86(instrs)
+    }
 }

@@ -43,8 +43,8 @@ pub fn get_strings(bytes: &Vec<u8>, min_len: usize, printable: bool) -> Vec<Stri
     let mut strings = Vec::<String>::new();
     while index < bytes.len() {
         let (str, size) = try_ascii_string(index, bytes, min_len, printable);
-        if str.is_some() {
-            strings.push(str.unwrap());
+        if let Some(s) = str {
+            strings.push(s);
         }
         index += size;
     }

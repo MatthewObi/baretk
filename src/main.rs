@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::collections::HashMap;
 mod dis;
+mod decomp;
 mod query;
 mod prog;
 mod dump;
@@ -86,6 +87,7 @@ fn cmd_disassemble(args: ArgList) {
         }
 
         let disassembly = dis::disassemble(&contents);
+        let output = disassembly.print(true);
         if out_file.is_some() {
             let out = out_file.unwrap();
             let mut file = match File::create(out) {
@@ -95,14 +97,38 @@ fn cmd_disassemble(args: ArgList) {
                     return;
                 }
             };
-            if let Err(error) = file.write(disassembly.as_bytes()) {
+            if let Err(error) = file.write(output.as_bytes()) {
                 eprintln!("Error writing file {}: {}", out, error);
                 return;
             }
         }
         else {
-            println!("{}", disassembly);
+            println!("{}", output);
         }
+    }
+    else {
+        eprintln!("Usage: baretk dis <in_file> [out_file]");
+    }
+}
+
+fn cmd_decompile(args: ArgList) {
+    if let Some(in_file) = args.pos_args.get(0) {
+        let mut file = match File::open(in_file) {
+            Ok(file) => file,
+            Err(error) => {
+                eprintln!("Error opening file {}: {}", in_file, error);
+                return;
+            }
+        };
+
+        let mut contents: Vec<u8> = vec![];
+        if let Err(error) = file.read_to_end(&mut contents) {
+            eprintln!("Error reading file {}: {}", in_file, error);
+            return;
+        }
+
+        let _decomp = decomp::decomp_program_from_bytes(&contents);
+        return;
     }
     else {
         eprintln!("Usage: baretk dis <in_file> [out_file]");
@@ -187,6 +213,7 @@ struct Command {
 
 const COMMANDS: &[Command] = &[
     Command { name: "dis", desc: "Disassembles an input binary.", func: cmd_disassemble },
+    Command { name: "decomp", desc: "Decompiles an input binary.", func: cmd_decompile },
     Command { name: "dump", desc: "Dumps information from an input binary.", func: cmd_dump },
     Command { name: "strings", desc: "Prints strings found in an input binary.", func: cmd_strings },
 ];
