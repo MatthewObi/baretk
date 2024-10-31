@@ -77,12 +77,35 @@ const OPCODE_POP_RSP: u8 = OPCODE_POP_REG+SP;
 const OPCODE_POP_RBP: u8 = OPCODE_POP_REG+BP;
 const OPCODE_POP_RSI: u8 = OPCODE_POP_REG+SI;
 const OPCODE_POP_RDI: u8 = OPCODE_POP_REG+DI;
+const OPCODE_OP_BYTE_IMM: u8 = 0x80;
+const OPCODE_OP_DWORD_IMM: u8 = 0x83;
+const OPCODE_TEST_BYTE_STR: u8 = 0x84;
+const OPCODE_TEST_DWORD_STR: u8 = 0x85;
 const OPCODE_MOV_BYTE_STR: u8 = 0x88;
 const OPCODE_MOV_DWORD_STR: u8 = 0x89;
 const OPCODE_MOV_BYTE_LD: u8 = 0x8a;
 const OPCODE_MOV_DWORD_LD: u8 = 0x8b;
 const OPCODE_NOP: u8 = 0x90;
+const OPCODE_MOV_REG_IMM8: u8 = 0xb0;
+const OPCODE_MOV_AL: u8 = OPCODE_MOV_REG_IMM8+AX;
+const OPCODE_MOV_CL: u8 = OPCODE_MOV_REG_IMM8+CX;
+const OPCODE_MOV_DL: u8 = OPCODE_MOV_REG_IMM8+DX;
+const OPCODE_MOV_BL: u8 = OPCODE_MOV_REG_IMM8+BX;
+const OPCODE_MOV_SP: u8 = OPCODE_MOV_REG_IMM8+SP;
+const OPCODE_MOV_BP: u8 = OPCODE_MOV_REG_IMM8+BP;
+const OPCODE_MOV_SIL: u8 = OPCODE_MOV_REG_IMM8+SI;
+const OPCODE_MOV_DIL: u8 = OPCODE_MOV_REG_IMM8+DI;
+const OPCODE_MOV_REG_IMM: u8 = 0xb8;
+const OPCODE_MOV_RAX: u8 = OPCODE_MOV_REG_IMM+AX;
+const OPCODE_MOV_RCX: u8 = OPCODE_MOV_REG_IMM+CX;
+const OPCODE_MOV_RDX: u8 = OPCODE_MOV_REG_IMM+DX;
+const OPCODE_MOV_RBX: u8 = OPCODE_MOV_REG_IMM+BX;
+const OPCODE_MOV_RSP: u8 = OPCODE_MOV_REG_IMM+SP;
+const OPCODE_MOV_RBP: u8 = OPCODE_MOV_REG_IMM+BP;
+const OPCODE_MOV_RSI: u8 = OPCODE_MOV_REG_IMM+SI;
+const OPCODE_MOV_RDI: u8 = OPCODE_MOV_REG_IMM+DI;
 const OPCODE_RET: u8 = 0xc3;
+const OPCODE_CALL: u8 = 0xe8;
 
 const OPSIZE_BYTE: u8 = 0x0;
 const OPSIZE_WORD: u8 = 0x1;
@@ -99,14 +122,16 @@ enum Operation {
     Or,
     Xor,
     Cmp,
+    Test,
     Mov,
     Nop,
     Push,
     Pop,
     Ret,
+    Call,
 }
 
-const PREFIX_REX_W: u8 = 0;
+const PREFIX_REX_W: u8 = 1;
 
 #[derive(Clone, Copy)]
 enum Operand {
@@ -114,6 +139,8 @@ enum Operand {
     ImmU8(u8),
     ImmU16(u16),
     ImmU32(u32),
+    ImmS8(i8),
+    ImmS32(i32),
     Reg8(u8),
     Reg8H(u8),
     Reg16(u8),
@@ -159,9 +186,11 @@ fn print_reg(s: usize, x: u8) -> &'static str {
 impl Operand {
     fn print(self) -> String {
         match self {
-            Self::ImmU8(x)  => format!("0x{:02x}", x),
-            Self::ImmU16(x)  => format!("0x{:04x}", x),
-            Self::ImmU32(x)  => format!("0x{:08x}", x),
+            Self::ImmU8(x)  => format!("0x{:x}", x),
+            Self::ImmU16(x)  => format!("0x{:x}", x),
+            Self::ImmU32(x)  => format!("0x{:x}", x),
+            Self::ImmS8(x)  => format!("{}", x),
+            Self::ImmS32(x)  => format!("{}", x),
             Self::Reg8(x)  => format!("{}", print_reg(0x0, x)),
             Self::Reg8H(x) => format!("{}", print_reg(0x4, x)),
             Self::Reg16(x) => format!("{}", print_reg(0x1, x)),
@@ -250,12 +279,14 @@ impl Instruction {
             Operation::Or   => format!("or {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::And  => format!("and {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::Xor  => format!("xor {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Test => format!("test {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::Cmp  => format!("cmp {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::Mov  => format!("mov {}, {}",  self.reg1.print(), self.reg2.print()),
             Operation::Push => format!("push {}",    self.reg1.print()),
             Operation::Pop  => format!("pop {}",     self.reg1.print()),
             Operation::Nop  => format!("nop"),
             Operation::Ret  => format!("ret"),
+            Operation::Call => format!("call {}", self.reg1.print()),
             _ => format!("unknown")
         }
     }
@@ -276,6 +307,17 @@ fn ins_regh_regh(foffset: usize, ins_size: u8, operation: Operation, op_size: u8
         OPSIZE_WORD  => ins_dest_src(foffset, ins_size, operation, Operand::Reg16(dest), Operand::Reg16(source)),
         OPSIZE_DWORD => ins_dest_src(foffset, ins_size, operation, Operand::Reg32(dest),Operand::Reg32(source)),
         OPSIZE_QWORD => ins_dest_src(foffset, ins_size, operation, Operand::Reg64(dest),Operand::Reg64(source)),
+        _ => panic!("Invalid op size")
+    }
+}
+
+// op dest:r8, source:imm8
+fn ins_regh_imm8(foffset: usize, ins_size: u8, operation: Operation, op_size: u8, dest: u8, source: i8) -> Instruction {
+    match op_size {
+        OPSIZE_BYTE  => ins_dest_src(foffset, ins_size, operation, Operand::Reg8H(dest), Operand::ImmS8(source)),
+        OPSIZE_WORD  => ins_dest_src(foffset, ins_size, operation, Operand::Reg16(dest), Operand::ImmS8(source)),
+        OPSIZE_DWORD => ins_dest_src(foffset, ins_size, operation, Operand::Reg32(dest),Operand::ImmS8(source)),
+        OPSIZE_QWORD => ins_dest_src(foffset, ins_size, operation, Operand::Reg64(dest),Operand::ImmS8(source)),
         _ => panic!("Invalid op size")
     }
 }
@@ -420,18 +462,85 @@ fn disassemble_x86_al_imm8(operation: Operation, bytes: &[u8], offset: usize) ->
     Some(ins_dest_src(offset, 2, operation, Operand::Reg8(AX), Operand::ImmU8(imm)))
 }
 
+fn disassemble_x86_op_imm(bytes: &[u8], offset: usize, op_size: u8, _swap_operands: bool) -> Option<Instruction> {
+    if offset + 1 >= bytes.len() {
+        return None
+    }
+    let x = bytes[offset+1];
+    let operation = match (x >> 3) & 0b111 {
+        0x0 => Operation::Add,
+        0x1 => Operation::Or,
+        0x2 => Operation::Adc,
+        0x3 => Operation::Sbb,
+        0x4 => Operation::And,
+        0x5 => Operation::Sub,
+        0x6 => Operation::Xor,
+        0x7 => Operation::Cmp,
+        _ => return None
+    };
+    if x & 0b11000000 == 0b11000000 {
+        let source = bytes[offset+2] as i8;
+        let dest = x & 0b111;
+        return Some(ins_regh_imm8(offset, 3, operation, op_size, dest, source))
+    }
+    None
+}
+
 fn disassemble_x86_push_pop(operation: Operation, bytes: &[u8], offset: usize) -> Option<Instruction> {
     let imm = bytes[offset] - match operation { Operation::Push => OPCODE_PUSH_REG, Operation::Pop => OPCODE_POP_REG, _ => 0 };
     Some(ins_single_op(offset, 1, operation, Operand::Reg64(imm)))
 }
 
-fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instruction> {
+fn disassemble_x86_branch_imm(operation: Operation, bytes: &[u8], offset: usize, op_size: u8) -> Option<Instruction> {
+    match op_size {
+        OPSIZE_BYTE => {
+            let imm = bytes[offset+1] as i8;
+            Some(ins_single_op(offset, 2, operation, Operand::ImmS8(imm + 2)))
+        },
+        OPSIZE_DWORD => {
+            let imm = u32::from_le_bytes([bytes[offset+1], bytes[offset+2], bytes[offset+3], bytes[offset+4]]);
+            Some(ins_single_op(offset, 5, operation, Operand::ImmU32(imm + 5)))
+        },
+        _ => None
+    }
+}
+
+fn disassemble_x86_mov_imm(bytes: &[u8], offset: usize, op_size: u8) -> Option<Instruction> {
+    let reg = bytes[offset] - match op_size { OPSIZE_BYTE => OPCODE_MOV_REG_IMM8, _ => OPCODE_MOV_REG_IMM };
+    match op_size {
+        OPSIZE_BYTE  => {
+            let imm = bytes[offset+1];
+            Some(ins_dest_src(offset, 2, Operation::Mov, Operand::Reg8(reg), Operand::ImmU8(imm)))
+        },
+        OPSIZE_DWORD => {
+            let imm = u32::from_le_bytes([bytes[offset+1], bytes[offset+2], bytes[offset+3], bytes[offset+4]]);
+            Some(ins_dest_src(offset, 5, Operation::Mov, Operand::Reg32(reg), Operand::ImmU32(imm)))
+        },
+        _ => None
+    }
+}
+
+fn rex_w_qword_or_dword(prefix: u8) -> u8 {
+    if (prefix & PREFIX_REX_W) != 0 { OPSIZE_QWORD } else { OPSIZE_DWORD }
+}
+
+fn disassemble_x86_instruction(bytes: &[u8], offset: usize, prefix: u8) -> Option<Instruction> {
     if offset >= bytes.len() {
         return None
     }
     let opcode = bytes[offset];
-    let prefix = match opcode {
-        _ => 0,
+    match opcode {
+        OPCODE_REX_W => {
+            let ins = disassemble_x86_instruction(bytes, offset + 1, prefix | PREFIX_REX_W);
+            if ins.is_some() {
+                let mut ins_ = ins.unwrap();
+                ins_.ins_size += 1;
+                ins_.offset = offset;
+                return Some(ins_);
+            }
+            return None
+        }
+        _ => (),
     };
     match opcode {
         OPCODE_ADD_BYTE_STR  => disassemble_x86_op_op(Operation::Add, bytes, offset, OPSIZE_BYTE, false),
@@ -485,12 +594,33 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize) -> Option<Instructio
         OPCODE_POP_RBP       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
         OPCODE_POP_RSI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
         OPCODE_POP_RDI       => disassemble_x86_push_pop(Operation::Pop, bytes, offset),
+        OPCODE_OP_BYTE_IMM   => disassemble_x86_op_imm(bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_OP_DWORD_IMM   => disassemble_x86_op_imm(bytes, offset, rex_w_qword_or_dword(prefix), false),
+        OPCODE_TEST_BYTE_STR  => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_BYTE, false),
+        OPCODE_TEST_DWORD_STR => disassemble_x86_op_op(Operation::Test, bytes, offset, rex_w_qword_or_dword(prefix), false),
         OPCODE_MOV_BYTE_STR  => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_BYTE, false),
-        OPCODE_MOV_DWORD_STR => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_DWORD, false),
+        OPCODE_MOV_DWORD_STR => disassemble_x86_op_op(Operation::Mov, bytes, offset, rex_w_qword_or_dword(prefix), false),
         OPCODE_MOV_BYTE_LD   => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_BYTE, true),
         OPCODE_MOV_DWORD_LD  => disassemble_x86_op_op(Operation::Mov, bytes, offset, OPSIZE_DWORD, true),
-        OPCODE_NOP           => Some(Instruction { operation: Operation::Nop, reg1: Operand::Nothing, reg2: Operand::Nothing, offset: offset, ins_size: 1 }),
-        OPCODE_RET           => Some(Instruction { offset: offset, ins_size: 1, operation: Operation::Ret, reg1: Operand::Nothing, reg2: Operand::Nothing }),
+        OPCODE_NOP           => Some(Instruction { operation: Operation::Nop, reg1: Operand::Nothing, reg2: Operand::Nothing, offset, ins_size: 1 }),
+        OPCODE_MOV_AL        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_CL        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_DL        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_BL        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_SP        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_BP        => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_SIL       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_DIL       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_BYTE),
+        OPCODE_MOV_RAX       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RCX       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RDX       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RBX       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RSP       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RBP       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RSI       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_MOV_RDI       => disassemble_x86_mov_imm(bytes, offset, OPSIZE_DWORD),
+        OPCODE_RET           => Some(Instruction { offset, ins_size: 1, operation: Operation::Ret, reg1: Operand::Nothing, reg2: Operand::Nothing }),
+        OPCODE_CALL         => disassemble_x86_branch_imm(Operation::Call, bytes, offset, OPSIZE_DWORD),
         _ => None
     }
 }
@@ -507,10 +637,14 @@ pub fn disassemble_x86(section: &Section, program: &Program) -> String {
     ];
     // let bytes = section.bytes.as_slice();
     while offset < bytes.len() { 
-        let res = disassemble_x86_instruction(bytes, offset);
+        let res = disassemble_x86_instruction(bytes, offset, 0);
         if res.is_some() {
             let ins = res.unwrap();
-            println!("{:<08x}: {}", offset, ins.print());
+            print!("{:<08x}: {} ; ", offset, ins.print());
+            for i in 0..ins.ins_size {
+                print!("0x{:02x} ", bytes[ins.offset + i as usize]);
+            }
+            println!("");
             offset += ins.ins_size as usize;
         }
         else {

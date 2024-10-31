@@ -91,9 +91,7 @@ enum Operation {
     Or,
     Xor,
     Slt,
-    Sge,
     Sltu,
-    Sgeu,
     Sll,
     Srl,
     Sra,
@@ -992,9 +990,9 @@ pub fn disassemble_riscv(section: &Section, program: &Program) -> String {
         if instr.is_some() {
             let ins = instr.unwrap();
             if ins.ins_size == 4 {
-                out += format!("{:24} ({:02X} {:02X} {:02X} {:02X})\n", ins.print(), bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]).as_str()
+                out += format!("{:24} ({:02X} {:02X} {:02X} {:02X})\n", ins.print(), bytes[ins.offset], bytes[ins.offset + 1], bytes[ins.offset + 2], bytes[ins.offset + 3]).as_str()
             } else {
-                out += format!("{:24} ({:02X} {:02X})\n", ins.print(), bytes[offset], bytes[offset + 1]).as_str()
+                out += format!("{:24} ({:02X} {:02X})\n", ins.print(), bytes[ins.offset], bytes[ins.offset + 1]).as_str()
             }
             offset += ins.ins_size as usize;
         }

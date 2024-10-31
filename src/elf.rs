@@ -1,6 +1,5 @@
 use std::{collections::HashMap, usize};
 use crate::prog::{Program, Section, Segment};
-use crate::dump::rwx_string;
 use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_from_u8_vec, read_u64_from_u8_vec, BIG_ENDIAN, LITTLE_ENDIAN};
 
 struct Header {
@@ -261,7 +260,7 @@ fn build_section_table(bytes: &Vec<u8>, common_header: &HeaderCommon, section_he
     hashmap
 }
 
-fn build_program_table(bytes: &Vec<u8>, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>) -> Vec<Segment> {
+fn build_program_table(common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>) -> Vec<Segment> {
     let mut v = Vec::<Segment>::new();
     for entry in program_headers {
         v.push(Segment {
@@ -280,7 +279,7 @@ fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon,
         bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
         machine_type: machine_type_string(common_header.e_machine).to_string(),
-        program_table: build_program_table(bytes, common_header, program_headers),
+        program_table: build_program_table(common_header, program_headers),
         section_table: build_section_table(bytes, common_header, section_headers)
     }
 }

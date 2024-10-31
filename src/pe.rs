@@ -247,12 +247,12 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
             opt.entry_point);
     }
     let toffset = coff_header.optional_header_size as usize + offset + 0x18;
-    println!("Section table: 0x{:08x}", toffset);
+    // println!("Section table: 0x{:08x}", toffset);
     let mut section_table = HashMap::<String, SectionHeader>::new();
     for i in 0..coff_header.num_sections {
         let section_header = read_section_header_32(bytes, toffset+(i as usize * 40));
         let section_name = get_name_from_section_header(&section_header);
-        println!("{:<8} 0x{:<08x}, 0x{:<08x}", section_name, section_header.virtual_addr, section_header.virtual_size);
+        // println!("{:<8} 0x{:<08x}, 0x{:<08x}", section_name, section_header.virtual_addr, section_header.virtual_size);
         section_table.insert(section_name.to_string(), section_header);
     }
     println!("TODO: finish parsing PE executable files.\n");
