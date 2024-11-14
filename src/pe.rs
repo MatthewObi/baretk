@@ -2,11 +2,11 @@ use core::str;
 use std::collections::HashMap;
 
 use crate::prog::{Program, Section, Segment};
-use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_from_u8_vec, read_u64_from_u8_vec, LITTLE_ENDIAN, RWX_EXEC, RWX_WRITE, RWX_READ};
+use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, LITTLE_ENDIAN, RWX_EXEC, RWX_WRITE, RWX_READ};
 
 const PE_OFFSET_OFFSET: usize = 0x3c;
 
-pub fn check_is_pe_executable(bytes: &Vec<u8>) -> bool {
+pub fn check_is_pe_executable(bytes: &[u8]) -> bool {
     // DOS header
     if !bytes.starts_with(&[0x4du8, 0x5au8]) {
         return false;
@@ -218,9 +218,10 @@ fn build_program_table(_bytes: &Vec<u8>, _coff_header: &CoffHeader, section_head
 
 fn build_program(bytes: &Vec<u8>, coff_header: &CoffHeader, opt_header: Option<OptionalHeader>, section_headers: &HashMap<String, SectionHeader>) -> Program {
     Program {
-        bits: if let Some(opt) = opt_header { match opt.magic { 0x10b => 32, 0x20b => 64, _ => 32} } else { 32 },
+        bits: if let Some(opt) = &opt_header { match opt.magic { 0x10b => 32, 0x20b => 64, _ => 32} } else { 32 },
         endianess: LITTLE_ENDIAN,
         machine_type: get_machine_type_string(coff_header.machine).to_string(),
+        entry_point: if let Some(opt) = &opt_header { opt.entry_point as u64 } else { 0 },
         program_table: build_program_table(bytes, coff_header, section_headers),
         section_table: build_section_table(bytes, coff_header, section_headers)
     }
@@ -256,9 +257,5 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
         section_table.insert(section_name.to_string(), section_header);
     }
     println!("TODO: finish parsing PE executable files.\n");
-    // prog::build_program_from_binary(bytes, Some(bits), Some(LITTLE_ENDIAN), Some(get_machine_type_string(coff_header.machine).to_string()))
     build_program(bytes, &coff_header, optional_header, &section_table)
-    // Program {
-
-    // }
 }

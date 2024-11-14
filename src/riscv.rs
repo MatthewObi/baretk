@@ -1,4 +1,4 @@
-use crate::dis::DisassemblySection;
+use crate::dis::{self, DisassemblySection};
 use crate::prog::{Section, Program};
 use crate::util::{i32_sign, BitExtr};
 
@@ -10,34 +10,34 @@ impl Register {
     const ZERO: Register = Register(0x0);
     const RA: Register = Register(0x1);
     const SP: Register = Register(0x2);
-    const GP: Register = Register(0x3);
-    const TP: Register = Register(0x4);
-    const T0: Register = Register(0x5);
-    const T1: Register = Register(0x6);
-    const T2: Register = Register(0x7);
+    // const GP: Register = Register(0x3);
+    // const TP: Register = Register(0x4);
+    // const T0: Register = Register(0x5);
+    // const T1: Register = Register(0x6);
+    // const T2: Register = Register(0x7);
     const S0: Register = Register(0x8);
-    const S1: Register = Register(0x9);
-    const A0: Register = Register(0xa);
-    const A1: Register = Register(0xb);
-    const A2: Register = Register(0xc);
-    const A3: Register = Register(0xd);
-    const A4: Register = Register(0xe);
-    const A5: Register = Register(0xf);
-    const A6: Register = Register(0x10);
-    const A7: Register = Register(0x11);
-    const S2: Register = Register(0x12);
-    const S3: Register = Register(0x13);
-    const S4: Register = Register(0x14);
-    const S5: Register = Register(0x15);
-    const S6: Register = Register(0x16);
-    const S7: Register = Register(0x17);
-    const S8: Register = Register(0x18);
-    const S9: Register = Register(0x19);
-    const S10: Register = Register(0x1a);
-    const S11: Register = Register(0x1b);
-    const T3: Register = Register(0x1c);
-    const T4: Register = Register(0x1d);
-    const T5: Register = Register(0x1e);
+    // const S1: Register = Register(0x9);
+    // const A0: Register = Register(0xa);
+    // const A1: Register = Register(0xb);
+    // const A2: Register = Register(0xc);
+    // const A3: Register = Register(0xd);
+    // const A4: Register = Register(0xe);
+    // const A5: Register = Register(0xf);
+    // const A6: Register = Register(0x10);
+    // const A7: Register = Register(0x11);
+    // const S2: Register = Register(0x12);
+    // const S3: Register = Register(0x13);
+    // const S4: Register = Register(0x14);
+    // const S5: Register = Register(0x15);
+    // const S6: Register = Register(0x16);
+    // const S7: Register = Register(0x17);
+    // const S8: Register = Register(0x18);
+    // const S9: Register = Register(0x19);
+    // const S10: Register = Register(0x1a);
+    // const S11: Register = Register(0x1b);
+    // const T3: Register = Register(0x1c);
+    // const T4: Register = Register(0x1d);
+    // const T5: Register = Register(0x1e);
     const T6: Register = Register(0x1f);
     const COUNT: usize = Self::T6.0 as usize + 1;
 
@@ -202,6 +202,21 @@ impl Operand {
             _ => "???".to_string(),
         }
     }
+
+    fn into(self) -> dis::Operand {
+        match self {
+            Self::Reg(r) => dis::Operand::Register(Register(r).name()),
+            Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmU32(x) =>  dis::Operand::Immediate(x.into()),
+            Self::ImmU64(x) =>  dis::Operand::Immediate(x as i64),
+            Self::ImmS8(x) =>  dis::Operand::Immediate(x.into()),
+            Self::ImmS16(x) =>  dis::Operand::Immediate(x.into()),
+            Self::ImmS32(x) =>  dis::Operand::Immediate(x.into()),
+            Self::ImmS64(x) =>  dis::Operand::Immediate(x.into()),
+            Self::Nothing => dis::Operand::Nothing,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -323,7 +338,7 @@ impl Instruction {
             Operation::Bltu  => format!("bltu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
             Operation::Bgeu  => format!("bgeu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
             Operation::Unknown => format!("???"),
-            _ => format!("unknown")
+            // _ => format!("unknown")
         }
     }
 
@@ -333,6 +348,42 @@ impl Instruction {
 
     pub fn size(self) -> usize {
         self.ins_size as usize
+    }
+
+    pub fn into(&self) -> dis::Instruction {
+        match self.operation {
+            Operation::Add   => dis::Instruction { opcode: "add", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
+            Operation::Sub   => dis::Instruction { opcode: "sub", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
+            Operation::And   => dis::Instruction { opcode: "and", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
+            Operation::Or    => dis::Instruction { opcode: "or", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
+            Operation::Addi  => dis::Instruction { opcode: "add", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Andi  => dis::Instruction { opcode: "and", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Ori   => dis::Instruction { opcode: "or", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Xori  => dis::Instruction { opcode: "xor", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lbu   => dis::Instruction { opcode: "lbu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lb    => dis::Instruction { opcode: "lb", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lhu   => dis::Instruction { opcode: "lhu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lh    => dis::Instruction { opcode: "lh", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lwu   => dis::Instruction { opcode: "lwu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Lw    => dis::Instruction { opcode: "lw", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Ld    => dis::Instruction { opcode: "ld", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Sb    => dis::Instruction { opcode: "sb", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Sh    => dis::Instruction { opcode: "sh", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Sw    => dis::Instruction { opcode: "sw", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Sd    => dis::Instruction { opcode: "sd", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Jal   => dis::Instruction { opcode: "jal", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
+            Operation::Jalr  => dis::Instruction { opcode: "jalr", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
+            Operation::Auipc => dis::Instruction { opcode: "auipc", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
+            Operation::Lui   => dis::Instruction { opcode: "lui", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
+            Operation::Li    => dis::Instruction { opcode: "mov", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
+            Operation::Blt   => dis::Instruction { opcode: "blt", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            Operation::Beq   => dis::Instruction { opcode: "beq", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            Operation::Bne   => dis::Instruction { opcode: "bne", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            Operation::Bltu  => dis::Instruction { opcode: "bltu", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            Operation::Bge   => dis::Instruction { opcode: "bge", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            Operation::Bgeu  => dis::Instruction { opcode: "bgeu", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
+            _  => dis::Instruction { opcode: "unk", operands: vec![], flags: 0 },
+        }
     }
 }
 
@@ -989,7 +1040,7 @@ fn disassemble_instruction(bytes: &[u8], offset: usize) -> Option<Instruction> {
     disassemble_16(u16::from_le_bytes(bytes[offset..offset+2].try_into().unwrap()), offset)
 }
 
-pub fn disassemble_riscv(section: &Section, section_name: &String, program: &Program) -> DisassemblySection {
+pub fn disassemble_riscv(section: &Section, section_name: &String, _program: &Program) -> DisassemblySection {
     let mut instrs = Vec::<Instruction>::new();
     let mut offset: usize = 0;
     let limit = 32usize;

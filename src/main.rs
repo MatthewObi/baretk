@@ -1,6 +1,4 @@
 use std::env;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::collections::HashMap;
 mod dis;
 mod decomp;
@@ -46,19 +44,8 @@ fn cmd_dump(args: ArgList) {
     if let Some(in_file) = args.pos_args.get(0) {
         let out_file = args.pos_args.get(1);
         let output = dump::dump_program(&prog::load_program_from_file(in_file).unwrap());
-        if out_file.is_some() {
-            let out = out_file.unwrap();
-            let mut file = match File::create(out) {
-                Ok(file) => file,
-                Err(error) => {
-                    eprintln!("Error creating file {}: {}", out, error);
-                    return;
-                }
-            };
-            if let Err(error) = file.write(output.as_bytes()) {
-                eprintln!("Error writing file {}: {}", out, error);
-                return;
-            }
+        if let Some(out) = out_file {
+            util::try_write_file(out, output.as_bytes());
         }
         else {
             println!("{}", output);
@@ -72,35 +59,15 @@ fn cmd_dump(args: ArgList) {
 fn cmd_disassemble(args: ArgList) {
     if let Some(in_file) = args.pos_args.get(0) {
         let out_file = args.pos_args.get(1);
-        let mut file = match File::open(in_file) {
-            Ok(file) => file,
-            Err(error) => {
-                eprintln!("Error opening file {}: {}", in_file, error);
-                return;
-            }
+        let contents = match util::try_read_file_contents(in_file.as_str()) {
+            Err(()) => { return; },
+            Ok(bytes) => bytes,
         };
-
-        let mut contents: Vec<u8> = vec![];
-        if let Err(error) = file.read_to_end(&mut contents) {
-            eprintln!("Error reading file {}: {}", in_file, error);
-            return;
-        }
 
         let disassembly = dis::disassemble(&contents);
         let output = disassembly.print(true);
-        if out_file.is_some() {
-            let out = out_file.unwrap();
-            let mut file = match File::create(out) {
-                Ok(file) => file,
-                Err(error) => {
-                    eprintln!("Error creating file {}: {}", out, error);
-                    return;
-                }
-            };
-            if let Err(error) = file.write(output.as_bytes()) {
-                eprintln!("Error writing file {}: {}", out, error);
-                return;
-            }
+        if let Some(out) = out_file {
+            util::try_write_file(out, output.as_bytes());
         }
         else {
             println!("{}", output);
@@ -113,22 +80,13 @@ fn cmd_disassemble(args: ArgList) {
 
 fn cmd_decompile(args: ArgList) {
     if let Some(in_file) = args.pos_args.get(0) {
-        let mut file = match File::open(in_file) {
-            Ok(file) => file,
-            Err(error) => {
-                eprintln!("Error opening file {}: {}", in_file, error);
-                return;
-            }
+        let contents = match util::try_read_file_contents(in_file.as_str()) {
+            Err(()) => { return; },
+            Ok(bytes) => bytes,
         };
 
-        let mut contents: Vec<u8> = vec![];
-        if let Err(error) = file.read_to_end(&mut contents) {
-            eprintln!("Error reading file {}: {}", in_file, error);
-            return;
-        }
-
-        let _decomp = decomp::decomp_program_from_bytes(&contents);
-        return;
+        let decomp = decomp::decomp_program_from_bytes(&contents, decomp::Language::Pseudocode);
+        println!("{}", decomp.print());
     }
     else {
         eprintln!("Usage: baretk dis <in_file> [out_file]");
@@ -138,19 +96,10 @@ fn cmd_decompile(args: ArgList) {
 fn cmd_strings(args: ArgList) {
     if let Some(in_file) = args.pos_args.get(0) {
         let out_file = args.pos_args.get(1);
-        let mut file = match File::open(in_file) {
-            Ok(file) => file,
-            Err(error) => {
-                eprintln!("Error opening file {}: {}", in_file, error);
-                return;
-            }
+        let contents = match util::try_read_file_contents(in_file.as_str()) {
+            Err(()) => { return; },
+            Ok(bytes) => bytes,
         };
-
-        let mut contents: Vec<u8> = vec![];
-        if let Err(error) = file.read_to_end(&mut contents) {
-            eprintln!("Error reading file {}: {}", in_file, error);
-            return;
-        }
 
         let min_len = if let Some(opt) = args.named_args.get("n") {
             let res = opt.parse::<usize>();
@@ -167,22 +116,9 @@ fn cmd_strings(args: ArgList) {
 
         let printable = args.named_args.contains_key("printable");
 
-        let strings = query::get_strings(&contents, min_len, printable);
-        if out_file.is_some() {
-            let out = out_file.unwrap();
-            let mut file = match File::create(out) {
-                Ok(file) => file,
-                Err(error) => {
-                    eprintln!("Error creating file {}: {}", out, error);
-                    return;
-                }
-            };
-            for str in strings {
-                if let Err(error) = file.write((str + "\n").as_bytes()) {
-                    eprintln!("Error writing file {}: {}", out, error);
-                    return;
-                }
-            }
+        let strings = query::get_strings(contents.as_slice(), min_len, printable);
+        if let Some(out) = out_file {
+            util::try_write_file_lines(out.as_str(), strings);
         }
         else {
             println!("ASCII strings found in {}:", in_file);

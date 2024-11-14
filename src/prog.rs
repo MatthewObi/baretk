@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use crate::query;
 use crate::elf;
 use crate::pe;
+use crate::util;
 
 pub struct Section {
     pub addr: u64,
@@ -22,8 +21,30 @@ pub struct Program {
     pub bits: u8,
     pub endianess: u8,
     pub machine_type: String,
+    pub entry_point: u64,
     pub program_table: Vec<Segment>,
     pub section_table: HashMap<String, Section>
+}
+
+impl Program {
+    fn find_section_and_segment(&self, addr: u64) -> (Option<&Section>, Option<&Segment>) {
+        let mut section = Option::<&Section>::None;
+        let mut segment = Option::<&Segment>::None;
+        for (key, value) in &self.section_table {
+            if addr >= value.addr && addr < value.addr + value.bytes.len() as u64 {
+                section = Some(&self.section_table[key]);
+                break;
+            }
+        }
+
+        for seg in &self.program_table {
+            if addr >= seg.vaddr && addr < seg.vaddr + seg.size as u64 {
+                segment = Some(seg);
+                break;
+            }
+        }
+        (section, segment)
+    }
 }
 
 pub fn build_program_from_binary(bytes: &Vec<u8>, bits: Option<u8>, endianess: Option<u8>, machine_type: Option<String>) -> Program {
@@ -44,31 +65,21 @@ pub fn build_program_from_binary(bytes: &Vec<u8>, bits: Option<u8>, endianess: O
         bits: bits.unwrap_or_default(),
         endianess: endianess.unwrap_or_default(),
         machine_type: machine_type.unwrap_or("unknown".to_string()),
+        entry_point: 0,
         program_table,
         section_table,
     }
 }
 
 pub fn load_program_from_file(path: &String) -> Result<Program, ()> {
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("Error opening file {}: {}", path, error);
-            return Err(());
-        }
-    };
-
-    let mut contents: Vec<u8> = vec![];
-    if let Err(error) = file.read_to_end(&mut contents) {
-        eprintln!("Error reading file {}: {}", path, error);
-        return Err(());
+    match util::try_read_file_contents(path) {
+        Err(()) => Err(()),
+        Ok(contents) => Ok(load_program_from_bytes(&contents)),
     }
-
-    Ok(load_program_from_bytes(&contents))
 }
 
 pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
-    let file_type = query::get_file_type(bytes);
+    let file_type = query::get_file_type(bytes.as_slice());
     match file_type {
         query::FileType::Elf => elf::load_program_from_bytes(bytes),
         query::FileType::PE  => pe::load_program_from_bytes(bytes),

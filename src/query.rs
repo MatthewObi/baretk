@@ -6,7 +6,7 @@ pub enum FileType {
     PE,
 }
 
-pub fn get_file_type(bytes: &Vec<u8>) -> FileType {
+pub fn get_file_type(bytes: &[u8]) -> FileType {
     if bytes.starts_with(&[0x7fu8, 0x45u8, 0x4cu8, 0x46u8]) {
         return FileType::Elf
     }
@@ -16,7 +16,7 @@ pub fn get_file_type(bytes: &Vec<u8>) -> FileType {
     FileType::RawBinary
 }
 
-fn try_ascii_string(index: usize, bytes: &Vec<u8>, min_len: usize, printable: bool) -> (Option<String>, usize) {
+fn try_ascii_string(index: usize, bytes: &[u8], min_len: usize, printable: bool) -> (Option<String>, usize) {
     let mut len = 0usize;
     while index + len < bytes.len() {
         if (printable && bytes[index + len] < 0x20u8) || bytes[index + len] == 0 {
@@ -38,7 +38,7 @@ fn try_ascii_string(index: usize, bytes: &Vec<u8>, min_len: usize, printable: bo
     }
 }
 
-pub fn get_strings(bytes: &Vec<u8>, min_len: usize, printable: bool) -> Vec<String> {
+pub fn get_strings(bytes: &[u8], min_len: usize, printable: bool) -> Vec<String> {
     let mut index = 0usize;
     let mut strings = Vec::<String>::new();
     while index < bytes.len() {

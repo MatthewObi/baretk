@@ -5,18 +5,18 @@ use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_fr
 struct Header {
     class: u8,
     data: u8,
-    version: u8,
-    abi: u8,
-    abi_version: u8,
+    // version: u8,
+    // abi: u8,
+    // abi_version: u8,
 }
 
 fn read_header(bytes: &Vec<u8>) -> Header {
     Header{
         class: bytes[0x04],
         data: bytes[0x05],
-        version: bytes[0x06],
-        abi: bytes[0x07],
-        abi_version: bytes[0x08],
+        // version: bytes[0x06],
+        // abi: bytes[0x07],
+        // abi_version: bytes[0x08],
     }
 }
 
@@ -69,13 +69,31 @@ impl MachineType {
 }
 
 fn machine_type_string(t: u16) -> &'static str {
-    let mt = MachineType(t);
-    match mt {
+    match MachineType(t) {
         MachineType::UNKNOWN => "unknown",
         MachineType::X86     => "x86",
         MachineType::AMD64   => "amd64",
         MachineType::ARM     => "arm",
         MachineType::RISCV   => "riscv",
+        _ => "unknown",
+    }
+}
+
+#[derive(PartialEq)]
+struct SectionType(u32);
+impl SectionType {
+    const NULL      : SectionType = SectionType(0x0);
+    const PROGBITS  : SectionType = SectionType(0x1);
+    const SYMTAB    : SectionType = SectionType(0x2);
+    const STRTAB    : SectionType = SectionType(0x3);
+}
+
+fn section_type_string(t: u32) -> &'static str {
+    match SectionType(t) {
+        SectionType::NULL       => "null",
+        SectionType::PROGBITS   => "program bits",
+        SectionType::STRTAB     => "string table",
+        SectionType::SYMTAB     => "symbol table",
         _ => "unknown",
     }
 }
@@ -279,6 +297,7 @@ fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon,
         bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
         machine_type: machine_type_string(common_header.e_machine).to_string(),
+        entry_point: common_header.e_entry,
         program_table: build_program_table(common_header, program_headers),
         section_table: build_section_table(bytes, common_header, section_headers)
     }
@@ -305,10 +324,10 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         read_common_header_64(bytes, header.data)
     };
-    // println!("{} file, {} (0x{:02X}), version {}",
-    //     elf_file_type_string(common_header.e_type),
-    //     machine_type_string(common_header.e_machine), common_header.e_machine,
-    //     common_header.e_version);
+    println!("{} file, {} (0x{:02X}), version {}",
+        elf_file_type_string(common_header.e_type),
+        machine_type_string(common_header.e_machine), common_header.e_machine,
+        common_header.e_version);
     // println!("entry point = 0x{:08x}", common_header.e_entry);
     // println!("program header = 0x{:08x}", common_header.e_phoff);
     // println!("section header = 0x{:08x}", common_header.e_shoff);
@@ -328,12 +347,13 @@ pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
     } else {
         read_section_header_64(bytes, common_header.e_shnum, common_header.e_shentsize, common_header.e_shoff, header.data)
     };
-    // println!("Section headers: count={}", common_header.e_shnum);
-    // for entry in &section_headers {
-    //     println!("name={:<16} offset=0x{:08x}, size=0x{:08x}", 
-    //         shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
-    //         entry.sh_offset,
-    //         entry.sh_size);
-    // }
+    println!("Section headers: count={}", common_header.e_shnum);
+    for entry in &section_headers {
+        println!("name={:<16} type={:<16} offset=0x{:08x}, size=0x{:08x}", 
+            shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
+            section_type_string(entry.sh_type),
+            entry.sh_offset,
+            entry.sh_size);
+    }
     build_program(bytes, &header, &common_header, &program_headers, &section_headers)
 }

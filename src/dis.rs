@@ -3,6 +3,61 @@ use crate::arm;
 use crate::x86;
 use crate::riscv;
 
+pub enum Operand {
+    Nothing,
+    Register(&'static str),
+    Memory(&'static str, &'static str, i64, u8),
+    Immediate(i64),
+}
+
+impl Operand {
+    pub fn print(&self) -> String {
+        match *self {
+            Operand::Register(name) => format!("{}", name),
+            Operand::Memory(base, index, offset, size) => {
+                let word_name = match size {
+                    1 => "BYTE",
+                    2 => "WORD",
+                    4 => "DWORD",
+                    8 => "QWORD",
+                    _ => "?"
+                };
+                if base == "" {
+                    format!("{} [{}]", word_name, offset)
+                }
+                else if base == "." {
+                    format!("{} [pc+{}]", word_name, offset)
+                }
+                else if index != "" {
+                    format!("{} [{}+{}*{}]", word_name, base, index, offset)
+                }
+                else {
+                    format!("{} [{}+{}]", word_name, base, offset)
+                }
+            },
+            Operand::Immediate(i) => format!("{}", i),
+            _ => format!("()")
+        }
+    }
+}
+
+// Common instruction struct for all architectures
+pub struct Instruction {
+    pub opcode: &'static str,
+    pub operands: Vec<Operand>,
+    pub flags: u64,
+}
+
+impl Instruction {
+    pub fn print(&self) -> String {
+        let mut str = format!("{}", self.opcode);
+        for operand in self.operands.as_slice() {
+            str += format!(" {},", operand.print()).as_str()
+        }
+        str.strip_suffix(",").unwrap_or(str.as_str()).to_string()
+    }
+}
+
 pub enum InstructionListing {
     Rv(Vec<riscv::Instruction>),
     X86(Vec<x86::Instruction>),
@@ -41,6 +96,27 @@ impl InstructionListing {
         };
         out
     }
+
+    pub fn instruction_vec(&self) -> Vec<Instruction> {
+        let mut out = Vec::<Instruction>::new();
+        match self {
+            Self::Rv(rv) => { 
+                let iter = rv.into_iter();
+                for it in iter {
+                    out.push(it.into());
+                }
+                out
+            },
+            Self::X86(rv) => { 
+                let iter = rv.into_iter();
+                for it in iter {
+                    out.push(it.into());
+                }
+                out
+            },
+            _ => out
+        }
+    }
 }
 
 pub struct DisassemblySection {
@@ -54,6 +130,14 @@ pub struct Disassembly {
 }
 
 impl Disassembly {
+    pub fn program(&self) -> &prog::Program {
+        &self.program
+    }
+
+    pub fn section(&self) -> &DisassemblySection {
+        &self.section
+    }
+
     pub fn print(&self, show_bytes: bool) -> String {
         let mut out = String::new();
         out += format!(".section {}\n", self.section.section_name).as_str();

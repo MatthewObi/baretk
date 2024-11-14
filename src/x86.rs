@@ -1,4 +1,4 @@
-use crate::dis::DisassemblySection;
+use crate::dis::{self, DisassemblySection};
 use crate::prog::{Section, Program};
 use crate::util::i32_sign;
 
@@ -10,19 +10,19 @@ const SP: u8 = 0x4;
 const BP: u8 = 0x5;
 const SI: u8 = 0x6;
 const DI: u8 = 0x7;
-const R8: u8 = 0x8;
-const R9: u8 = 0x9;
-const R10: u8 = 0xa;
-const R11: u8 = 0xb;
-const R12: u8 = 0xc;
-const R13: u8 = 0xd;
-const R14: u8 = 0xe;
-const R15: u8 = 0xf;
+// const R8: u8 = 0x8;
+// const R9: u8 = 0x9;
+// const R10: u8 = 0xa;
+// const R11: u8 = 0xb;
+// const R12: u8 = 0xc;
+// const R13: u8 = 0xd;
+// const R14: u8 = 0xe;
+// const R15: u8 = 0xf;
 
-const AH: u8 = 0x4;
-const CH: u8 = 0x5;
-const DH: u8 = 0x6;
-const BH: u8 = 0x7;
+// const AH: u8 = 0x4;
+// const CH: u8 = 0x5;
+// const DH: u8 = 0x6;
+// const BH: u8 = 0x7;
 
 const OPCODE_ADD_BYTE_STR: u8 = 0x00;
 const OPCODE_ADD_DWORD_STR: u8 = 0x01;
@@ -261,6 +261,34 @@ impl Operand {
             _ => format!("???"),
         }
     }
+
+    fn into(self) -> dis::Operand {
+        match self {
+            Self::Reg8(x)  => dis::Operand::Register(print_reg(0x0, x)),
+            Self::Reg8H(x) => dis::Operand::Register(print_reg(0x4, x)),
+            Self::Reg16(x) => dis::Operand::Register(print_reg(0x1, x)),
+            Self::Reg32(x) => dis::Operand::Register(print_reg(0x2, x)),
+            Self::Reg64(x) => dis::Operand::Register(print_reg(0x3, x)),
+            Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmU32(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmS8(x) => dis::Operand::Immediate(x.into()),
+            Self::ImmS32(x) => dis::Operand::Immediate(x.into()),
+            Self::PtrRegByte(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 1),
+            Self::PtrRegWord(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 2),
+            Self::PtrRegDword(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 4),
+            Self::PtrRegQword(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 8),
+            Self::PtrRelByte(rel) => dis::Operand::Memory(".", "", rel.into(), 1),
+            Self::PtrRelWord(rel) => dis::Operand::Memory(".", "", rel.into(), 2),
+            Self::PtrRelDword(rel) => dis::Operand::Memory(".", "", rel.into(), 4),
+            Self::PtrRelQword(rel) => dis::Operand::Memory(".", "", rel.into(), 8),
+            Self::PtrRegRegByte(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x0, offset), 0x0, 1),
+            Self::PtrRegRegWord(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x1, offset), 0x0, 2),
+            Self::PtrRegRegDword(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x2, offset), 0x0, 4),
+            Self::PtrRegRegQword(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x3, offset), 0x0, 8),
+            Self::Nothing => dis::Operand::Nothing,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -300,6 +328,23 @@ impl Instruction {
 
     pub fn size(self) -> usize {
         self.ins_size as usize
+    }
+
+    pub fn into(&self) -> dis::Instruction {
+        match self.operation {
+            Operation::Add   => dis::Instruction { opcode: "add", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::Sub   => dis::Instruction { opcode: "sub", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::And   => dis::Instruction { opcode: "and", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::Or    => dis::Instruction { opcode: "or", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::Xor   => dis::Instruction { opcode: "xor", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::Mov   => dis::Instruction { opcode: "mov", operands: vec![self.reg1.into(), self.reg2.into()], flags: 0 },
+            Operation::Call  => dis::Instruction { opcode: "call", operands: vec![self.reg1.into()], flags: 0 },
+            Operation::Push  => dis::Instruction { opcode: "push", operands: vec![self.reg1.into()], flags: 0 },
+            Operation::Pop   => dis::Instruction { opcode: "pop", operands: vec![self.reg1.into()], flags: 0 },
+            Operation::Nop   => dis::Instruction { opcode: "nop", operands: vec![], flags: 0 },
+            Operation::Ret   => dis::Instruction { opcode: "ret", operands: vec![], flags: 0 },
+            _ => panic!(""),
+        }
     }
 }
 
