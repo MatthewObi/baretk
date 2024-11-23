@@ -2,7 +2,7 @@ use core::str;
 use std::collections::HashMap;
 
 use crate::prog::{Program, Section, Segment};
-use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, LITTLE_ENDIAN, RWX_EXEC, RWX_WRITE, RWX_READ};
+use crate::util::{read_u16_from_slice, read_u32_from_slice, LITTLE_ENDIAN, RWX_EXEC, RWX_WRITE, RWX_READ};
 
 const PE_OFFSET_OFFSET: usize = 0x3c;
 
@@ -146,52 +146,52 @@ struct SectionHeader {
     characteristics: u32,
 }
 
-fn read_coff_header(bytes: &Vec<u8>, offset: usize) -> CoffHeader {
+fn read_coff_header(bytes: &[u8], offset: usize) -> CoffHeader {
     CoffHeader {
-        machine: read_u16_from_u8_vec(bytes, offset+0x4, LITTLE_ENDIAN),
-        num_sections: read_u16_from_u8_vec(bytes, offset+0x6, LITTLE_ENDIAN),
-        timestamp: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
-        optional_header_size: read_u16_from_u8_vec(bytes, offset+0x14, LITTLE_ENDIAN),
-        characteristics: read_u16_from_u8_vec(bytes, offset+0x16, LITTLE_ENDIAN),
+        machine: read_u16_from_slice(bytes, offset+0x4, LITTLE_ENDIAN),
+        num_sections: read_u16_from_slice(bytes, offset+0x6, LITTLE_ENDIAN),
+        timestamp: read_u32_from_slice(bytes, offset+0x8, LITTLE_ENDIAN),
+        optional_header_size: read_u16_from_slice(bytes, offset+0x14, LITTLE_ENDIAN),
+        characteristics: read_u16_from_slice(bytes, offset+0x16, LITTLE_ENDIAN),
     }
 }
 
-fn read_optional_header(bytes: &Vec<u8>, offset: usize) -> OptionalHeader {
+fn read_optional_header(bytes: &[u8], offset: usize) -> OptionalHeader {
     OptionalHeader {
-        magic: read_u16_from_u8_vec(bytes, offset, LITTLE_ENDIAN),
+        magic: read_u16_from_slice(bytes, offset, LITTLE_ENDIAN),
         major_link_ver: bytes[offset+0x2],
         minor_link_ver: bytes[offset+0x3],
-        code_size: read_u32_from_u8_vec(bytes, offset+0x4, LITTLE_ENDIAN),
-        data_size: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
-        bss_size: read_u32_from_u8_vec(bytes, offset+0xc, LITTLE_ENDIAN),
-        entry_point: read_u32_from_u8_vec(bytes, offset+0x10, LITTLE_ENDIAN),
-        base_addr: read_u32_from_u8_vec(bytes, offset+0x14, LITTLE_ENDIAN),
+        code_size: read_u32_from_slice(bytes, offset+0x4, LITTLE_ENDIAN),
+        data_size: read_u32_from_slice(bytes, offset+0x8, LITTLE_ENDIAN),
+        bss_size: read_u32_from_slice(bytes, offset+0xc, LITTLE_ENDIAN),
+        entry_point: read_u32_from_slice(bytes, offset+0x10, LITTLE_ENDIAN),
+        base_addr: read_u32_from_slice(bytes, offset+0x14, LITTLE_ENDIAN),
     }
 }
 
-fn read_windows_header_32p(bytes: &Vec<u8>, offset: usize) -> WinHeader {
+fn read_windows_header_32p(bytes: &[u8], offset: usize) -> WinHeader {
     WinHeader {
-        section_alignment: read_u32_from_u8_vec(bytes, offset+0x4, LITTLE_ENDIAN),
-        file_alignment: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
+        section_alignment: read_u32_from_slice(bytes, offset+0x4, LITTLE_ENDIAN),
+        file_alignment: read_u32_from_slice(bytes, offset+0x8, LITTLE_ENDIAN),
     }
 }
 
-fn read_section_header_32(bytes: &Vec<u8>, offset: usize) -> SectionHeader {
+fn read_section_header_32(bytes: &[u8], offset: usize) -> SectionHeader {
     SectionHeader {
         name: bytes[offset..offset+8].try_into().expect("Bad array slice"),
-        virtual_size: read_u32_from_u8_vec(bytes, offset+0x8, LITTLE_ENDIAN),
-        virtual_addr: read_u32_from_u8_vec(bytes, offset+0xc, LITTLE_ENDIAN),
-        data_size: read_u32_from_u8_vec(bytes, offset+0x10, LITTLE_ENDIAN),
-        data_ptr: read_u32_from_u8_vec(bytes, offset+0x14, LITTLE_ENDIAN),
-        reloc_ptr: read_u32_from_u8_vec(bytes, offset+0x18, LITTLE_ENDIAN),
-        _line_num_ptr: read_u32_from_u8_vec(bytes, offset+0x1c, LITTLE_ENDIAN),
-        _reloc_count: read_u16_from_u8_vec(bytes, offset+0x20, LITTLE_ENDIAN),
-        _line_num_count: read_u16_from_u8_vec(bytes, offset+0x22, LITTLE_ENDIAN),
-        characteristics: read_u32_from_u8_vec(bytes, offset+0x24, LITTLE_ENDIAN),
+        virtual_size: read_u32_from_slice(bytes, offset+0x8, LITTLE_ENDIAN),
+        virtual_addr: read_u32_from_slice(bytes, offset+0xc, LITTLE_ENDIAN),
+        data_size: read_u32_from_slice(bytes, offset+0x10, LITTLE_ENDIAN),
+        data_ptr: read_u32_from_slice(bytes, offset+0x14, LITTLE_ENDIAN),
+        reloc_ptr: read_u32_from_slice(bytes, offset+0x18, LITTLE_ENDIAN),
+        _line_num_ptr: read_u32_from_slice(bytes, offset+0x1c, LITTLE_ENDIAN),
+        _reloc_count: read_u16_from_slice(bytes, offset+0x20, LITTLE_ENDIAN),
+        _line_num_count: read_u16_from_slice(bytes, offset+0x22, LITTLE_ENDIAN),
+        characteristics: read_u32_from_slice(bytes, offset+0x24, LITTLE_ENDIAN),
     }
 }
 
-fn build_section_table(bytes: &Vec<u8>, _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> HashMap<String, Section> {
+fn build_section_table(bytes: &[u8], _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> HashMap<String, Section> {
     let mut hashmap = HashMap::<String, Section>::new();
     for (k, v) in section_headers {
         hashmap.insert(k.to_string(), Section {
@@ -202,7 +202,7 @@ fn build_section_table(bytes: &Vec<u8>, _coff_header: &CoffHeader, section_heade
     hashmap
 }
 
-fn build_program_table(_bytes: &Vec<u8>, _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> Vec<Segment> {
+fn build_program_table(_bytes: &[u8], _coff_header: &CoffHeader, section_headers: &HashMap<String, SectionHeader>) -> Vec<Segment> {
     let mut v = Vec::<Segment>::new();
     for (_, entry) in section_headers {
         v.push(Segment {
@@ -216,7 +216,7 @@ fn build_program_table(_bytes: &Vec<u8>, _coff_header: &CoffHeader, section_head
     v
 }
 
-fn build_program(bytes: &Vec<u8>, coff_header: &CoffHeader, opt_header: Option<OptionalHeader>, section_headers: &HashMap<String, SectionHeader>) -> Program {
+fn build_program(bytes: &[u8], coff_header: &CoffHeader, opt_header: Option<OptionalHeader>, section_headers: &HashMap<String, SectionHeader>) -> Program {
     Program {
         bits: if let Some(opt) = &opt_header { match opt.magic { 0x10b => 32, 0x20b => 64, _ => 32} } else { 32 },
         endianess: LITTLE_ENDIAN,
@@ -227,7 +227,7 @@ fn build_program(bytes: &Vec<u8>, coff_header: &CoffHeader, opt_header: Option<O
     }
 }
 
-pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
+pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
     let b: &[u8; 4] = (&bytes[PE_OFFSET_OFFSET..PE_OFFSET_OFFSET + 4]).try_into().unwrap();
     let offset = u32::from_le_bytes(*b) as usize;
     let coff_header = read_coff_header(bytes, offset);

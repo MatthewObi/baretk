@@ -1,6 +1,6 @@
 use std::{collections::HashMap, usize};
 use crate::prog::{Program, Section, Segment};
-use crate::util::{read_u16_from_u8_vec, read_u32_from_u8_vec, read_u32_to_u64_from_u8_vec, read_u64_from_u8_vec, BIG_ENDIAN, LITTLE_ENDIAN};
+use crate::util::{read_u16_from_slice, read_u32_from_slice, read_u32_to_u64_from_slice, read_u64_from_slice, BIG_ENDIAN, LITTLE_ENDIAN};
 
 struct Header {
     class: u8,
@@ -10,7 +10,7 @@ struct Header {
     // abi_version: u8,
 }
 
-fn read_header(bytes: &Vec<u8>) -> Header {
+fn read_header(bytes: &[u8]) -> Header {
     Header{
         class: bytes[0x04],
         data: bytes[0x05],
@@ -124,116 +124,116 @@ struct SectionHeaderEntry {
     sh_entsize: u64,
 }
 
-fn read_common_header_32(bytes: &Vec<u8>, endianness: u8) -> HeaderCommon {
+fn read_common_header_32(bytes: &[u8], endianness: u8) -> HeaderCommon {
     HeaderCommon {
-        e_type: read_u16_from_u8_vec(bytes, 0x10, endianness),
-        e_machine: read_u16_from_u8_vec(bytes, 0x12,endianness),
-        e_version: read_u32_from_u8_vec(bytes, 0x14,endianness),
-        e_entry: read_u32_to_u64_from_u8_vec(bytes, 0x18, endianness),
-        e_phoff: read_u32_to_u64_from_u8_vec(bytes, 0x1c, endianness),
-        e_shoff: read_u32_to_u64_from_u8_vec(bytes, 0x20, endianness),
-        e_flags: read_u32_from_u8_vec(bytes, 0x24, endianness),
-        e_ehsize: read_u16_from_u8_vec(bytes, 0x28, endianness),
-        e_phentsize: read_u16_from_u8_vec(bytes, 0x2a, endianness),
-        e_phnum: read_u16_from_u8_vec(bytes, 0x2c, endianness),
-        e_shentsize: read_u16_from_u8_vec(bytes, 0x2e, endianness),
-        e_shnum: read_u16_from_u8_vec(bytes, 0x30, endianness),
-        e_shstrndx: read_u16_from_u8_vec(bytes, 0x32, endianness),
+        e_type: read_u16_from_slice(bytes, 0x10, endianness),
+        e_machine: read_u16_from_slice(bytes, 0x12,endianness),
+        e_version: read_u32_from_slice(bytes, 0x14,endianness),
+        e_entry: read_u32_to_u64_from_slice(bytes, 0x18, endianness),
+        e_phoff: read_u32_to_u64_from_slice(bytes, 0x1c, endianness),
+        e_shoff: read_u32_to_u64_from_slice(bytes, 0x20, endianness),
+        e_flags: read_u32_from_slice(bytes, 0x24, endianness),
+        e_ehsize: read_u16_from_slice(bytes, 0x28, endianness),
+        e_phentsize: read_u16_from_slice(bytes, 0x2a, endianness),
+        e_phnum: read_u16_from_slice(bytes, 0x2c, endianness),
+        e_shentsize: read_u16_from_slice(bytes, 0x2e, endianness),
+        e_shnum: read_u16_from_slice(bytes, 0x30, endianness),
+        e_shstrndx: read_u16_from_slice(bytes, 0x32, endianness),
     }
 }
 
-fn read_common_header_64(bytes: &Vec<u8>, endianness: u8) -> HeaderCommon {
+fn read_common_header_64(bytes: &[u8], endianness: u8) -> HeaderCommon {
     HeaderCommon {
-        e_type: read_u16_from_u8_vec(bytes, 0x10, endianness),
-        e_machine: read_u16_from_u8_vec(bytes, 0x12, endianness),
-        e_version: read_u32_from_u8_vec(bytes, 0x14,endianness),
-        e_entry: read_u64_from_u8_vec(bytes, 0x18, endianness),
-        e_phoff: read_u64_from_u8_vec(bytes, 0x20, endianness),
-        e_shoff: read_u64_from_u8_vec(bytes, 0x28, endianness),
-        e_flags: read_u32_from_u8_vec(bytes, 0x30, endianness),
-        e_ehsize: read_u16_from_u8_vec(bytes, 0x34, endianness),
-        e_phentsize: read_u16_from_u8_vec(bytes, 0x36, endianness),
-        e_phnum: read_u16_from_u8_vec(bytes, 0x38, endianness),
-        e_shentsize: read_u16_from_u8_vec(bytes, 0x3a, endianness),
-        e_shnum: read_u16_from_u8_vec(bytes, 0x3c, endianness),
-        e_shstrndx: read_u16_from_u8_vec(bytes, 0x3e, endianness),
+        e_type: read_u16_from_slice(bytes, 0x10, endianness),
+        e_machine: read_u16_from_slice(bytes, 0x12, endianness),
+        e_version: read_u32_from_slice(bytes, 0x14,endianness),
+        e_entry: read_u64_from_slice(bytes, 0x18, endianness),
+        e_phoff: read_u64_from_slice(bytes, 0x20, endianness),
+        e_shoff: read_u64_from_slice(bytes, 0x28, endianness),
+        e_flags: read_u32_from_slice(bytes, 0x30, endianness),
+        e_ehsize: read_u16_from_slice(bytes, 0x34, endianness),
+        e_phentsize: read_u16_from_slice(bytes, 0x36, endianness),
+        e_phnum: read_u16_from_slice(bytes, 0x38, endianness),
+        e_shentsize: read_u16_from_slice(bytes, 0x3a, endianness),
+        e_shnum: read_u16_from_slice(bytes, 0x3c, endianness),
+        e_shstrndx: read_u16_from_slice(bytes, 0x3e, endianness),
     }
 }
 
-fn read_program_header_32(bytes: &Vec<u8>, phnum: u16, phsize: u16, start: u64, endianness: u8) -> Vec<ProgramHeaderEntry> {
+fn read_program_header_32(bytes: &[u8], phnum: u16, phsize: u16, start: u64, endianness: u8) -> Vec<ProgramHeaderEntry> {
     let mut out = Vec::<ProgramHeaderEntry>::with_capacity(phnum as usize);
     let mut s = start as usize;
     for _ in 0..phnum {
         out.push(ProgramHeaderEntry{
-            p_type: read_u32_from_u8_vec(bytes, s + 0x0, endianness),
-            p_flags: read_u32_from_u8_vec(bytes, s + 0x18, endianness),
-            p_offset: read_u32_to_u64_from_u8_vec(bytes, s + 0x4, endianness),
-            p_vaddr: read_u32_to_u64_from_u8_vec(bytes, s + 0x8, endianness),
-            p_paddr: read_u32_to_u64_from_u8_vec(bytes, s + 0xc, endianness),
-            p_filesz: read_u32_to_u64_from_u8_vec(bytes, s + 0x10, endianness),
-            p_memsz: read_u32_to_u64_from_u8_vec(bytes, s + 0x14, endianness),
-            p_align: read_u32_to_u64_from_u8_vec(bytes, s + 0x1c, endianness),
+            p_type: read_u32_from_slice(bytes, s + 0x0, endianness),
+            p_flags: read_u32_from_slice(bytes, s + 0x18, endianness),
+            p_offset: read_u32_to_u64_from_slice(bytes, s + 0x4, endianness),
+            p_vaddr: read_u32_to_u64_from_slice(bytes, s + 0x8, endianness),
+            p_paddr: read_u32_to_u64_from_slice(bytes, s + 0xc, endianness),
+            p_filesz: read_u32_to_u64_from_slice(bytes, s + 0x10, endianness),
+            p_memsz: read_u32_to_u64_from_slice(bytes, s + 0x14, endianness),
+            p_align: read_u32_to_u64_from_slice(bytes, s + 0x1c, endianness),
         });
         s += phsize as usize;
     }
     out
 }
 
-fn read_program_header_64(bytes: &Vec<u8>, phnum: u16, phsize: u16, start: u64, endianness: u8) -> Vec<ProgramHeaderEntry> {
+fn read_program_header_64(bytes: &[u8], phnum: u16, phsize: u16, start: u64, endianness: u8) -> Vec<ProgramHeaderEntry> {
     let mut out = Vec::<ProgramHeaderEntry>::with_capacity(phnum as usize);
     let mut s = start as usize;
     for _ in 0..phnum {
         out.push(ProgramHeaderEntry {
-            p_type: read_u32_from_u8_vec(bytes, s + 0x0, endianness),
-            p_flags: read_u32_from_u8_vec(bytes, s + 0x4, endianness),
-            p_offset: read_u64_from_u8_vec(bytes, s + 0x8, endianness),
-            p_vaddr: read_u64_from_u8_vec(bytes, s + 0x10, endianness),
-            p_paddr: read_u64_from_u8_vec(bytes, s + 0x18, endianness),
-            p_filesz: read_u64_from_u8_vec(bytes, s + 0x20, endianness),
-            p_memsz: read_u64_from_u8_vec(bytes, s + 0x28, endianness),
-            p_align: read_u64_from_u8_vec(bytes, s + 0x30, endianness),
+            p_type: read_u32_from_slice(bytes, s + 0x0, endianness),
+            p_flags: read_u32_from_slice(bytes, s + 0x4, endianness),
+            p_offset: read_u64_from_slice(bytes, s + 0x8, endianness),
+            p_vaddr: read_u64_from_slice(bytes, s + 0x10, endianness),
+            p_paddr: read_u64_from_slice(bytes, s + 0x18, endianness),
+            p_filesz: read_u64_from_slice(bytes, s + 0x20, endianness),
+            p_memsz: read_u64_from_slice(bytes, s + 0x28, endianness),
+            p_align: read_u64_from_slice(bytes, s + 0x30, endianness),
         });
         s += phsize as usize;
     }
     out
 }
 
-fn read_section_header_32(bytes: &Vec<u8>, shnum: u16, shsize: u16, start: u64, endianness: u8) -> Vec<SectionHeaderEntry> {
+fn read_section_header_32(bytes: &[u8], shnum: u16, shsize: u16, start: u64, endianness: u8) -> Vec<SectionHeaderEntry> {
     let mut out = Vec::<SectionHeaderEntry>::with_capacity(shnum as usize);
     let mut s = start as usize;
     for _ in 0..shnum {
         out.push(SectionHeaderEntry{
-            sh_name: read_u32_from_u8_vec(bytes, s + 0x0, endianness),
-            sh_type: read_u32_from_u8_vec(bytes, s + 0x4, endianness),
-            sh_flags: read_u32_to_u64_from_u8_vec(bytes, s + 0x8, endianness),
-            sh_addr: read_u32_to_u64_from_u8_vec(bytes, s + 0xc, endianness),
-            sh_offset: read_u32_to_u64_from_u8_vec(bytes, s + 0x10, endianness),
-            sh_size: read_u32_to_u64_from_u8_vec(bytes, s + 0x14, endianness),
-            sh_link: read_u32_from_u8_vec(bytes, s + 0x18, endianness),
-            sh_info: read_u32_from_u8_vec(bytes, s + 0x1c, endianness),
-            sh_addralign: read_u32_to_u64_from_u8_vec(bytes, s + 0x20, endianness),
-            sh_entsize: read_u32_to_u64_from_u8_vec(bytes, s + 0x24, endianness),
+            sh_name: read_u32_from_slice(bytes, s + 0x0, endianness),
+            sh_type: read_u32_from_slice(bytes, s + 0x4, endianness),
+            sh_flags: read_u32_to_u64_from_slice(bytes, s + 0x8, endianness),
+            sh_addr: read_u32_to_u64_from_slice(bytes, s + 0xc, endianness),
+            sh_offset: read_u32_to_u64_from_slice(bytes, s + 0x10, endianness),
+            sh_size: read_u32_to_u64_from_slice(bytes, s + 0x14, endianness),
+            sh_link: read_u32_from_slice(bytes, s + 0x18, endianness),
+            sh_info: read_u32_from_slice(bytes, s + 0x1c, endianness),
+            sh_addralign: read_u32_to_u64_from_slice(bytes, s + 0x20, endianness),
+            sh_entsize: read_u32_to_u64_from_slice(bytes, s + 0x24, endianness),
         });
         s += shsize as usize;
     }
     out
 }
 
-fn read_section_header_64(bytes: &Vec<u8>, shnum: u16, shsize: u16, start: u64, endianness: u8) -> Vec<SectionHeaderEntry> {
+fn read_section_header_64(bytes: &[u8], shnum: u16, shsize: u16, start: u64, endianness: u8) -> Vec<SectionHeaderEntry> {
     let mut out = Vec::<SectionHeaderEntry>::with_capacity(shnum as usize);
     let mut s = start as usize;
     for _ in 0..shnum {
         out.push(SectionHeaderEntry{
-            sh_name: read_u32_from_u8_vec(bytes, s + 0x0, endianness),
-            sh_type: read_u32_from_u8_vec(bytes, s + 0x4, endianness),
-            sh_flags: read_u64_from_u8_vec(bytes, s + 0x8, endianness),
-            sh_addr: read_u64_from_u8_vec(bytes, s + 0x10, endianness),
-            sh_offset: read_u64_from_u8_vec(bytes, s + 0x18, endianness),
-            sh_size: read_u64_from_u8_vec(bytes, s + 0x20, endianness),
-            sh_link: read_u32_from_u8_vec(bytes, s + 0x28, endianness),
-            sh_info: read_u32_from_u8_vec(bytes, s + 0x2c, endianness),
-            sh_addralign: read_u64_from_u8_vec(bytes, s + 0x30, endianness),
-            sh_entsize: read_u64_from_u8_vec(bytes, s + 0x38, endianness),
+            sh_name: read_u32_from_slice(bytes, s + 0x0, endianness),
+            sh_type: read_u32_from_slice(bytes, s + 0x4, endianness),
+            sh_flags: read_u64_from_slice(bytes, s + 0x8, endianness),
+            sh_addr: read_u64_from_slice(bytes, s + 0x10, endianness),
+            sh_offset: read_u64_from_slice(bytes, s + 0x18, endianness),
+            sh_size: read_u64_from_slice(bytes, s + 0x20, endianness),
+            sh_link: read_u32_from_slice(bytes, s + 0x28, endianness),
+            sh_info: read_u32_from_slice(bytes, s + 0x2c, endianness),
+            sh_addralign: read_u64_from_slice(bytes, s + 0x30, endianness),
+            sh_entsize: read_u64_from_slice(bytes, s + 0x38, endianness),
         });
         s += shsize as usize;
     }
@@ -248,7 +248,7 @@ fn abi_string(abi: u8) -> String {
     }
 }
 
-fn shstring(bytes: &Vec<u8>, idx: u32) -> String {
+fn shstring(bytes: &[u8], idx: u32) -> String {
     let i = idx as usize;
     let mut j = i;
     while j < bytes.len() {
@@ -266,7 +266,7 @@ fn shstring(bytes: &Vec<u8>, idx: u32) -> String {
     String::from(s)
 }
 
-fn build_section_table(bytes: &Vec<u8>, common_header: &HeaderCommon, section_headers: &Vec<SectionHeaderEntry>) -> HashMap<String, Section> {
+fn build_section_table(bytes: &[u8], common_header: &HeaderCommon, section_headers: &Vec<SectionHeaderEntry>) -> HashMap<String, Section> {
     let mut hashmap = HashMap::<String, Section>::new();
     for entry in section_headers {
         let key = shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name);
@@ -292,7 +292,7 @@ fn build_program_table(common_header: &HeaderCommon, program_headers: &Vec<Progr
     v
 }
 
-fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>) -> Program {
+fn build_program(bytes: &[u8], header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>) -> Program {
     Program{
         bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
@@ -303,7 +303,7 @@ fn build_program(bytes: &Vec<u8>, header: &Header, common_header: &HeaderCommon,
     }
 }
 
-pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
+pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
     let header = read_header(bytes);
     // println!("ELF version {}, {}-bit, {}, ABI {} version {}",
     //     header.version, 

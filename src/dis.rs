@@ -156,7 +156,7 @@ impl Disassembly {
     }
 }
 
-pub fn disassemble(bytes: &Vec<u8>) -> Disassembly {
+pub fn disassemble(bytes: &[u8]) -> Disassembly {
     let program = prog::load_program_from_bytes(bytes);
     disassemble_program(program)
 }

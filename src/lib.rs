@@ -1,5 +1,5 @@
 use core::slice;
-use std::{alloc::Layout, ffi::CStr};
+use std::{alloc::Layout, ffi::{c_int, CStr}};
 
 use prog::Program;
 use util::LITTLE_ENDIAN;
@@ -161,12 +161,12 @@ pub extern "C" fn baretk_free_program(program: *mut Program) {
 }
 
 #[no_mangle]
-pub extern "C" fn baretk_get_endianess(program: *const Program) -> i32 {
+pub extern "C" fn baretk_get_endianess(program: *const Program) -> c_int {
     if program.is_null() {
-        return LITTLE_ENDIAN as i32;
+        return LITTLE_ENDIAN as c_int;
     }
 
-    unsafe { (*program).endianess as i32 }
+    unsafe { (*program).endianess as c_int }
 }
 
 #[no_mangle]

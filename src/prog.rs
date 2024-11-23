@@ -47,11 +47,11 @@ impl Program {
     }
 }
 
-pub fn build_program_from_binary(bytes: &Vec<u8>, bits: Option<u8>, endianess: Option<u8>, machine_type: Option<String>) -> Program {
+pub fn build_program_from_binary(bytes: &[u8], bits: Option<u8>, endianess: Option<u8>, machine_type: Option<String>) -> Program {
     let mut section_table = HashMap::<String, Section>::new();
     section_table.insert(String::from("file"), Section {
         addr: 0x0,
-        bytes: bytes.clone()
+        bytes: bytes.to_vec().clone()
     });
     let mut program_table = Vec::<Segment>::new();
     program_table.push(Segment {
@@ -78,8 +78,8 @@ pub fn load_program_from_file(path: &String) -> Result<Program, ()> {
     }
 }
 
-pub fn load_program_from_bytes(bytes: &Vec<u8>) -> Program {
-    let file_type = query::get_file_type(bytes.as_slice());
+pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
+    let file_type = query::get_file_type(bytes);
     match file_type {
         query::FileType::Elf => elf::load_program_from_bytes(bytes),
         query::FileType::PE  => pe::load_program_from_bytes(bytes),

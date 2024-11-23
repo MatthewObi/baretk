@@ -340,7 +340,7 @@ fn decomp_disassembly(dis: &Disassembly) -> Vec<Expr> {
     expr_list
 }
 
-pub fn decomp_program_from_bytes(bytes: &Vec<u8>, dest_lang: Language) -> Decomp {
+pub fn decomp_program_from_bytes(bytes: &[u8], dest_lang: Language) -> Decomp {
     let dis = dis::disassemble(bytes);
     decomp_program(dis, dest_lang)
 }
