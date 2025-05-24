@@ -223,7 +223,8 @@ fn build_program(bytes: &[u8], coff_header: &CoffHeader, opt_header: Option<Opti
         machine_type: get_machine_type_string(coff_header.machine).to_string(),
         entry_point: if let Some(opt) = &opt_header { opt.entry_point as u64 } else { 0 },
         program_table: build_program_table(bytes, coff_header, section_headers),
-        section_table: build_section_table(bytes, coff_header, section_headers)
+        section_table: build_section_table(bytes, coff_header, section_headers),
+        symbol_table: HashMap::new() // TODO: Populate symbol table from PE header
     }
 }
 

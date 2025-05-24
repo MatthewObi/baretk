@@ -1,5 +1,5 @@
 use std::{collections::HashMap, usize};
-use crate::prog::{Program, Section, Segment};
+use crate::prog::{Program, Section, Segment, Symbol};
 use crate::util::{read_u16_from_slice, read_u32_from_slice, read_u32_to_u64_from_slice, read_u64_from_slice, BIG_ENDIAN, LITTLE_ENDIAN};
 
 struct Header {
@@ -124,6 +124,16 @@ struct SectionHeaderEntry {
     sh_entsize: u64,
 }
 
+#[derive(Debug)]
+struct SymbolEntry {
+    st_name: u32,
+    st_value: u64,
+    st_size: u64,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+}
+
 fn read_common_header_32(bytes: &[u8], endianness: u8) -> HeaderCommon {
     HeaderCommon {
         e_type: read_u16_from_slice(bytes, 0x10, endianness),
@@ -240,6 +250,50 @@ fn read_section_header_64(bytes: &[u8], shnum: u16, shsize: u16, start: u64, end
     out
 }
 
+fn read_symbol_table_32(bytes: &[u8], snum: u64, ssize: u64, start: u64, endianness: u8) -> Vec<SymbolEntry> {
+    let mut out = Vec::<SymbolEntry>::new();
+    let mut s = start as usize;
+    for _ in 0..snum {
+        out.push(SymbolEntry {
+            st_name: read_u32_from_slice(bytes, s + 0x0, endianness),
+            st_value: read_u32_to_u64_from_slice(bytes, s + 0x4, endianness),
+            st_size: read_u32_to_u64_from_slice(bytes, s + 0x8, endianness),
+            st_info: bytes[s + 0x9],
+            st_other: bytes[s + 0xa],
+            st_shndx: read_u16_from_slice(bytes, s + 0xb, endianness),
+        });
+        s += ssize as usize;
+    }
+    out
+}
+
+fn read_symbol_table_64(bytes: &[u8], snum: u64, ssize: u64, start: u64, endianness: u8) -> Vec<SymbolEntry> {
+    let mut out = Vec::<SymbolEntry>::new();
+    let mut s = start as usize;
+    for _ in 0..snum {
+        out.push(SymbolEntry {
+            st_name: read_u32_from_slice(bytes, s + 0x0, endianness),
+            st_info: bytes[s + 0x4],
+            st_other: bytes[s + 0x5],
+            st_shndx: read_u16_from_slice(bytes, s + 0x6, endianness),
+            st_value: read_u64_from_slice(bytes, s + 0x8, endianness),
+            st_size: read_u64_from_slice(bytes, s + 0x10, endianness),
+        });
+        s += ssize as usize;
+    }
+    out
+}
+
+fn get_strtab_ndx(bytes: &[u8], common_header: &HeaderCommon, section_headers: &Vec<SectionHeaderEntry>) -> Option<u16> {
+    for entry in section_headers.iter().enumerate() {
+        let name = shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.1.sh_name);
+        if name == ".strtab" {
+            return Some(entry.0 as u16);
+        }
+    }
+    None
+}
+
 fn abi_string(abi: u8) -> String {
     match abi {
         0x0 => format!("none"),
@@ -292,14 +346,40 @@ fn build_program_table(common_header: &HeaderCommon, program_headers: &Vec<Progr
     v
 }
 
-fn build_program(bytes: &[u8], header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>) -> Program {
+fn build_symbol_table(bytes: &[u8], common_header: &HeaderCommon, section_headers: &Vec<SectionHeaderEntry>, symbols: &Vec<SymbolEntry>) -> HashMap<String, Symbol> {
+    let mut map = HashMap::<String, Symbol>::new();
+    let strtabndx = get_strtab_ndx(bytes, common_header, section_headers);
+    map.insert(String::from("main"), Symbol { addr: 0x8018u64, size: 0 });
+    for entry in symbols {
+        let key = if let Some(idx) = strtabndx {
+            let name = shstring(bytes, section_headers[idx as usize].sh_offset as u32 + entry.st_name);
+            if name == "" {
+                entry.st_value.to_string()
+            }
+            else {
+                name
+            }
+        }
+        else {
+            entry.st_value.to_string()
+        };
+        map.insert(key, Symbol {
+            addr: entry.st_value,
+            size: entry.st_size
+        });
+    }
+    map
+}
+
+fn build_program(bytes: &[u8], header: &Header, common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>, section_headers: &Vec<SectionHeaderEntry>, symbol_table: &Vec<SymbolEntry>) -> Program {
     Program{
         bits: if header.class == 0x1 { 32 } else if header.class == 0x2 { 64 } else { 0 },
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
         machine_type: machine_type_string(common_header.e_machine).to_string(),
         entry_point: common_header.e_entry,
         program_table: build_program_table(common_header, program_headers),
-        section_table: build_section_table(bytes, common_header, section_headers)
+        section_table: build_section_table(bytes, common_header, section_headers),
+        symbol_table: build_symbol_table(bytes, common_header, section_headers, symbol_table) // TODO: Extract symbol info from .symtab section.
     }
 }
 
@@ -355,5 +435,23 @@ pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
             entry.sh_offset,
             entry.sh_size);
     }
-    build_program(bytes, &header, &common_header, &program_headers, &section_headers)
+    let strtabndx = get_strtab_ndx(bytes, &common_header, &section_headers);
+    let mut symbol_table = Vec::<SymbolEntry>::new();
+    for entry in &section_headers {
+        if entry.sh_type == SectionType::SYMTAB.0 {
+            symbol_table.extend(if header.class == 0x1 {
+                read_symbol_table_32(bytes, entry.sh_size / entry.sh_entsize, entry.sh_entsize, entry.sh_offset, header.data)
+            } else {
+                read_symbol_table_64(bytes, entry.sh_size / entry.sh_entsize, entry.sh_entsize, entry.sh_offset, header.data)
+            });
+        }
+    }
+    println!("Symbols: count={}", symbol_table.len());
+    for entry in &symbol_table {
+        println!("name={:<16} value=0x{:08x}, size=0x{:08x}", 
+            shstring(bytes, section_headers[strtabndx.unwrap() as usize].sh_offset as u32 + entry.st_name),
+            entry.st_value,
+            entry.st_size);
+    }
+    build_program(bytes, &header, &common_header, &program_headers, &section_headers, &symbol_table)
 }

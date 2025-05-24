@@ -17,17 +17,23 @@ pub struct Segment {
     pub size: usize,
 }
 
+pub struct Symbol {
+    pub addr: u64,
+    pub size: u64,
+}
+
 pub struct Program {
     pub bits: u8,
     pub endianess: u8,
     pub machine_type: String,
     pub entry_point: u64,
     pub program_table: Vec<Segment>,
-    pub section_table: HashMap<String, Section>
+    pub section_table: HashMap<String, Section>,
+    pub symbol_table: HashMap<String, Symbol>
 }
 
 impl Program {
-    fn find_section_and_segment(&self, addr: u64) -> (Option<&Section>, Option<&Segment>) {
+    pub fn find_section_and_segment(&self, addr: u64) -> (Option<&Section>, Option<&Segment>) {
         let mut section = Option::<&Section>::None;
         let mut segment = Option::<&Segment>::None;
         for (key, value) in &self.section_table {
@@ -44,6 +50,16 @@ impl Program {
             }
         }
         (section, segment)
+    }
+
+    pub fn get_symbols_in_section(&self, start: u64, stop: u64) -> Vec<(u64, String)> {
+        let mut symbols = Vec::<(u64, String)>::new();
+        for (k, v) in &self.symbol_table {
+            if v.addr >= start && v.addr < stop {
+                symbols.push((v.addr, k.clone()));
+            }
+        }
+        symbols
     }
 }
 
@@ -68,6 +84,7 @@ pub fn build_program_from_binary(bytes: &[u8], bits: Option<u8>, endianess: Opti
         entry_point: 0,
         program_table,
         section_table,
+        symbol_table: HashMap::new()
     }
 }
 

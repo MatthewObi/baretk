@@ -61,15 +61,21 @@ impl Instruction {
 pub enum InstructionListing {
     Rv(Vec<riscv::Instruction>),
     X86(Vec<x86::Instruction>),
+    Arm(Vec<arm::Instruction>),
     Unknown,
 }
 
 impl InstructionListing {
-    pub fn print(&self, addr: u64, bytes: Option<&[u8]>) -> String {
+    pub fn print(&self, addr: u64, bytes: Option<&[u8]>, symbols: Vec<(u64, String)>) -> String {
         let mut out = String::new();
         match self {
             Self::Rv(instrs) => {
                 for ins in instrs {
+                    for sym in &symbols {
+                        if sym.0 == addr + ins.offset() as u64 {
+                            out += format!("{}::\n", sym.1).as_str();
+                        }
+                    }
                     out += format!("    {:32}", ins.print()).as_str();
                     if let Some(b) = bytes {
                         out += format!("({:02x}", b[ins.offset()]).as_str();
@@ -82,6 +88,23 @@ impl InstructionListing {
             },
             Self::X86(instrs) => {
                 for ins in instrs {
+                    out += format!("    {:32}", ins.print()).as_str();
+                    if let Some(b) = bytes {
+                        out += format!("({:02x}", b[ins.offset()]).as_str();
+                        for i in 1..ins.size() {
+                            out += format!(" {:02x}", b[ins.offset() + i]).as_str();
+                        }
+                        out += ")\n";
+                    }
+                }
+            },
+            Self::Arm(instrs) => {
+                for ins in instrs {
+                    for sym in &symbols {
+                        if sym.0 == addr + ins.offset() as u64 {
+                            out += format!("{}::\n", sym.1).as_str();
+                        }
+                    }
                     out += format!("    {:32}", ins.print()).as_str();
                     if let Some(b) = bytes {
                         out += format!("({:02x}", b[ins.offset()]).as_str();
@@ -143,14 +166,15 @@ impl Disassembly {
         out += format!(".section {}\n", self.section.section_name).as_str();
         if let Some(section) = self.program.section_table.get(&self.section.section_name) {
             out += format!(".org {:#010x}\n", section.addr).as_str();
+            let symbols = self.program.get_symbols_in_section(section.addr, section.addr + section.bytes.len() as u64);
             let bytes = match show_bytes {
                 true => Some(section.bytes.as_slice()),
                 _ => None,
             };
-            out += self.section.instructions.print(section.addr, bytes).as_str();
+            out += self.section.instructions.print(section.addr, bytes, symbols).as_str();
         }
         else {
-            out += self.section.instructions.print(0x0, None).as_str();
+            out += self.section.instructions.print(0x0, None, Vec::<(u64, String)>::new()).as_str();
         }
         out
     }

@@ -22,5 +22,11 @@ pub fn dump_program(program: &Program) -> String {
     for item in program.section_table.iter() {
         s += format!("  {:<16} {:08x} {:08x}\n", item.0, item.1.addr, item.1.bytes.len()).as_str();
     }
+    if program.symbol_table.len() > 0 {
+        s += format!("Symbols:\n  {:<32} {:<8} {:<8}\n", " Name", "Value", "Size").as_str();
+        for item in program.symbol_table.iter() {
+            s += format!("  {:<32} {:08x} {:08x}\n", item.0, item.1.addr, item.1.size).as_str();
+        }
+    }
     s
 }
