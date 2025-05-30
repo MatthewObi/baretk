@@ -4,11 +4,14 @@ use crate::elf;
 use crate::pe;
 use crate::util;
 
+#[derive(Clone)]
 pub struct Section {
     pub addr: u64,
     pub bytes: Vec<u8>,
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct Segment {
     pub perm: u8,
     pub offset: u64,
@@ -17,11 +20,14 @@ pub struct Segment {
     pub size: usize,
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct Symbol {
     pub addr: u64,
     pub size: u64,
 }
 
+#[derive(Clone)]
 pub struct Program {
     pub bits: u8,
     pub endianess: u8,
