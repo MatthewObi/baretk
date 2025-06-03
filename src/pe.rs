@@ -107,6 +107,7 @@ fn characteristics_string(c: u16) -> String {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct CoffHeader {
     machine: u16,
     num_sections: u16,
@@ -117,6 +118,7 @@ struct CoffHeader {
     characteristics: u16,
 }
 
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct OptionalHeader {
     magic: u16,
     major_link_ver: u8,
@@ -128,11 +130,13 @@ struct OptionalHeader {
     base_addr: u32,
 }
 
+#[allow(dead_code)] // TODO: Remove this and actually use this
 struct WinHeader {
     section_alignment: u32,
     file_alignment: u32,
 }
 
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct SectionHeader {
     name: [u8; 8],
     virtual_size: u32,
@@ -169,6 +173,7 @@ fn read_optional_header(bytes: &[u8], offset: usize) -> OptionalHeader {
     }
 }
 
+#[allow(dead_code)] // TODO: Remove this and actually use this
 fn read_windows_header_32p(bytes: &[u8], offset: usize) -> WinHeader {
     WinHeader {
         section_alignment: read_u32_from_slice(bytes, offset+0x4, LITTLE_ENDIAN),

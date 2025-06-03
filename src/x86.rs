@@ -139,10 +139,10 @@ const PREFIX_REX_W: u8 = 1;
 enum Operand {
     Nothing,
     ImmU8(u8),
-    ImmU16(u16),
+    // ImmU16(u16),
     ImmU32(u32),
     ImmS8(i8),
-    ImmS32(i32),
+    // ImmS32(i32),
     Reg8(u8),
     Reg8H(u8),
     Reg16(u8),
@@ -189,10 +189,10 @@ impl Operand {
     fn print(self) -> String {
         match self {
             Self::ImmU8(x)  => format!("0x{:x}", x),
-            Self::ImmU16(x)  => format!("0x{:x}", x),
+            // Self::ImmU16(x)  => format!("0x{:x}", x),
             Self::ImmU32(x)  => format!("0x{:x}", x),
             Self::ImmS8(x)  => format!("{}", x),
-            Self::ImmS32(x)  => format!("{}", x),
+            // Self::ImmS32(x)  => format!("{}", x),
             Self::Reg8(x)  => format!("{}", print_reg(0x0, x)),
             Self::Reg8H(x) => format!("{}", print_reg(0x4, x)),
             Self::Reg16(x) => format!("{}", print_reg(0x1, x)),
@@ -270,10 +270,10 @@ impl Operand {
             Self::Reg32(x) => dis::Operand::Register(print_reg(0x2, x)),
             Self::Reg64(x) => dis::Operand::Register(print_reg(0x3, x)),
             Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
+            // Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
             Self::ImmU32(x) => dis::Operand::Immediate(x.into()),
             Self::ImmS8(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmS32(x) => dis::Operand::Immediate(x.into()),
+            // Self::ImmS32(x) => dis::Operand::Immediate(x.into()),
             Self::PtrRegByte(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 1),
             Self::PtrRegWord(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 2),
             Self::PtrRegDword(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 4),
@@ -681,18 +681,18 @@ fn disassemble_x86_instruction(bytes: &[u8], offset: usize, prefix: u8) -> Optio
     }
 }
 
-pub fn disassemble_x86(section: &Section, section_name: &String, program: &Program) -> DisassemblySection {
+pub fn disassemble_x86(section: &Section, section_name: &String, _program: &Program) -> DisassemblySection {
     let mut offset = 0x0;
-    let bytes = &[
-        0x50u8,
-        0x31, 0xc0,
-        0x89, 0x47, 0xf4,
-        0x58,
-        0x90,
-        0xc3
-    ];
+    // let bytes = &[
+    //     0x50u8,
+    //     0x31, 0xc0,
+    //     0x89, 0x47, 0xf4,
+    //     0x58,
+    //     0x90,
+    //     0xc3
+    // ];
     let mut instrs = Vec::<Instruction>::new();
-    // let bytes = section.bytes.as_slice();
+    let bytes = section.bytes.as_slice();
     while offset < bytes.len() { 
         let res = disassemble_x86_instruction(bytes, offset, 0);
         if res.is_some() {

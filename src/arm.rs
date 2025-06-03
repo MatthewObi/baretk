@@ -84,6 +84,13 @@ fn bltamstr(x: u8) -> &'static str {
     }
 }
 
+const PSR_CPSR: u8 = 0;
+const PSR_SPSR: u8 = 1;
+
+const PSR_MODE_ALL: u8 = 0;
+const PSR_MODE_FLAG: u8 = 1;
+const PSR_MODE_C: u8 = 2;
+
 const REG_SP: u8 = 13;
 const REG_LR: u8 = 14;
 const REG_PC: u8 = 15;
@@ -93,6 +100,7 @@ enum Operand {
     Reg(u8, u8, u8),
     Imm(u32, u8, u8),
     RegList(u32),
+    Psr(u8, u8),
     SImm(i32),
 }
 
@@ -101,7 +109,7 @@ impl Operand {
         match self {
             Self::Reg(r, s, st) => {
                 if s != 0 {
-                    format!("r{} {} {}", r, shtystr(st), s)
+                    format!("r{} {} #{}", r, shtystr(st), s)
                 }
                 else {
                     if r == REG_SP {
@@ -140,13 +148,49 @@ impl Operand {
             },
             Self::Imm(x, s, st) => {
                 if s != 0 {
-                    format!("#{} {} {}", x, shtystr(st), s)
+                    format!("#{} {} #{}", x, shtystr(st), s)
                 }
                 else {
                     format!("#{}", x)
                 }
             },
             Self::SImm(x) => format!("#{}", x),
+            Self::Psr(which, state) => {
+                match which {
+                    PSR_CPSR => match state {
+                        PSR_MODE_FLAG => format!("CPSR_flg"),
+                        PSR_MODE_C => format!("CPSR_c"),
+                        _ => format!("CPSR"),
+                    },
+                    PSR_SPSR => match state {
+                        PSR_MODE_FLAG => format!("SPSR_flg"),
+                        PSR_MODE_C => format!("SPSR_c"),
+                        _ => format!("SPSR"),
+                    },
+                    _ => format!("???"),
+                }
+            },
+        }
+    }
+
+    fn value(self) -> i64 {
+        match self {
+            Self::Imm(x, s, st) => {
+                if s != 0 {
+                    match st {
+                        ST_LSL => ((x as u64) << s) as i64,
+                        ST_LSR => ((x as u64) >> s) as i64,
+                        ST_ASR => ((x as i32) as i64) >> s,
+                        ST_ROR => x.rotate_right(s.into()) as i64,
+                        _ => x as i64
+                    }
+                }
+                else {
+                    x as i64
+                }
+            },
+            Self::SImm(x) => x as i64,
+            _ => 0,
         }
     }
 }
@@ -169,7 +213,7 @@ fn rd(x: u32) -> Operand {
 }
 
 fn bl_offset(x: u32) -> i32 {
-    (x as i32).bextr(23, 0)
+    ((x as i32).bextr(23, 0)) << 2
 }
 
 enum Opcode {
@@ -179,6 +223,8 @@ enum Opcode {
     Bl(Operand),
     Mul(Operand, Operand, Operand),
     MulA(Operand, Operand, Operand, Operand),
+    Mrs(Operand, Operand),
+    Msr(Operand, Operand),
     Ldr(Operand, Operand, Operand),
     Str(Operand, Operand, Operand),
     Ldm(Operand, Operand, bool, u8),
@@ -215,8 +261,10 @@ impl Instruction {
         match self.opcode {
             Opcode::Swi                                           => format!("swi{}", condstr(self.cond)),
             Opcode::Bx(rn)                               => format!("bx{} {}", condstr(self.cond), rn.print()),
-            Opcode::B(rn)                                => format!("b{} {}", condstr(self.cond), rn.print()),
-            Opcode::Bl(rn)                               => format!("bl{} {}", condstr(self.cond), rn.print()),
+            Opcode::B(rn)                                => format!("b{} _{:08x}", condstr(self.cond), self.offset as i64 + 0x8 + rn.value()),
+            Opcode::Bl(rn)                               => format!("bl{} _{:08x}", condstr(self.cond), self.offset as i64 + 0x8 + rn.value()),
+            Opcode::Mrs(rm, psr)                => format!("mrs{} {}, {}", condstr(self.cond), rm.print(), psr.print()),
+            Opcode::Msr(psr, rm)                => format!("msr{} {}, {}", condstr(self.cond), psr.print(), rm.print()),
             Opcode::Mul(rd, rm, rs)    => format!("mul{}{} {}, {}, {}", condstr(self.cond), fstr(self.set_flags), rd.print(), rm.print(), rs.print()),
             Opcode::MulA(rd, rm, rs, rn)    => format!("mla{}{} {}, {}, {}, {}", condstr(self.cond), fstr(self.set_flags), rd.print(), rm.print(), rs.print(), rn.print()),
             Opcode::Str(rn, op1, op2)  => format!("str{} {}, [{}, {}]", condstr(self.cond), rn.print(), op1.print(), op2.print()),
@@ -234,7 +282,16 @@ impl Instruction {
             Opcode::Cmp(op1, op2)               => format!("cmp{} {}, {}", condstr(self.cond), op1.print(), op2.print()),
             Opcode::Cmn(op1, op2)               => format!("cmn{} {}, {}", condstr(self.cond), op1.print(), op2.print()),
             Opcode::Orr(rd, op1, op2)  => format!("orr{}{} {}, {}, {}", condstr(self.cond), fstr(self.set_flags), rd.print(), op1.print(), op2.print()),
-            Opcode::Mov(rd, op)  => format!("mov{} {}, {}", condstr(self.cond), rd.print(), op.print()),
+            Opcode::Mov(rd, op)  =>  {
+                let dst = match rd { Operand::Reg(r, _, _) => Some(r), _ => None };
+                let src = match op { Operand::Reg(r, _, _) => Some(r), _ => None };
+                if src.is_some() && dst.is_some() && src == dst {
+                    format!("nop")
+                }
+                else {
+                    format!("mov{} {}, {}", condstr(self.cond), rd.print(), op.print())
+                }
+            },
             Opcode::Bic(rd, op1, op2)  => format!("bic{}{} {}, {}, {}", condstr(self.cond), fstr(self.set_flags), rd.print(), op1.print(), op2.print()),
             Opcode::Mvn(rd, op)  => format!("mvn{} {}, {}", condstr(self.cond), rd.print(), op.print()),
             Opcode::Stm(rn, op, wb, am)  => {
@@ -321,6 +378,31 @@ fn disassemble_arm_ins(ins: u32, offset: usize) -> Option<Instruction> {
             return Some(Instruction {opcode: Opcode::Mul(rd, rn, rs), offset, cond, set_flags, ins_size: 4})
         }
     }
+    if ins.bextr(27, 23) == 0b00010 && ins.bextr(21, 16) == 0b001111 && ins.bextr(11, 0) == 0 {
+        let psr = Operand::Psr(if (ins & (1 << 22)) != 0 { PSR_SPSR } else { PSR_CPSR }, PSR_MODE_ALL);
+        let rm = Operand::Reg(ins.bextr(15, 12) as u8, 0, 0);
+        return Some(Instruction {opcode: Opcode::Mrs(rm, psr), offset, cond, set_flags: false, ins_size: 4})
+    }
+    if ins.bextr(27, 23) == 0b00010 && ins.bextr(21, 12) == 0b1010011111 && ins.bextr(11, 4) == 0 {
+        let psr = Operand::Psr(if (ins & (1 << 22)) != 0 { PSR_SPSR } else { PSR_CPSR }, PSR_MODE_ALL);
+        let rm = Operand::Reg(ins.bextr(3, 0) as u8, 0, 0);
+        return Some(Instruction {opcode: Opcode::Msr(psr, rm), offset, cond, set_flags: false, ins_size: 4})
+    }
+    if ins.bextr(27, 23) == 0b00010 && ins.bextr(21, 12) == 0b1000011111 && ins.bextr(11, 4) == 0 {
+        let psr = Operand::Psr(if (ins & (1 << 22)) != 0 { PSR_SPSR } else { PSR_CPSR }, PSR_MODE_C);
+        let rm = Operand::Reg(ins.bextr(3, 0) as u8, 0, 0);
+        return Some(Instruction {opcode: Opcode::Msr(psr, rm), offset, cond, set_flags: false, ins_size: 4})
+    }
+    if ins.bextr(27, 23) == 0b00010 && ins.bextr(21, 12) == 0b1010001111 {
+        let psr = Operand::Psr(if (ins & (1 << 22)) != 0 { PSR_SPSR } else { PSR_CPSR }, PSR_MODE_FLAG);
+        let rm = Operand::Reg(ins.bextr(3, 0) as u8, 0, 0);
+        return Some(Instruction {opcode: Opcode::Msr(psr, rm), offset, cond, set_flags: false, ins_size: 4})
+    }
+    if ins.bextr(27, 23) == 0b00110 && ins.bextr(21, 12) == 0b1010001111 {
+        let psr = Operand::Psr(if (ins & (1 << 22)) != 0 { PSR_SPSR } else { PSR_CPSR }, PSR_MODE_FLAG);
+        let rm = Operand::Imm(ins.bextr(7, 0) as u32, ins.bextr(11, 8) as u8, ST_LSL);
+        return Some(Instruction {opcode: Opcode::Msr(psr, rm), offset, cond, set_flags: false, ins_size: 4})
+    }
     if ins.bextr(27, 24) == 0b1111 {
         return Some(Instruction {opcode: Opcode::Swi, offset, cond, set_flags: false, ins_size: 4})
     }
@@ -382,13 +464,14 @@ fn disassemble_arm_ins(ins: u32, offset: usize) -> Option<Instruction> {
 //     }
 // }
 
-fn disassemble_ins(bytes: &[u8], offset: usize) -> Option<Instruction> {
+fn disassemble_ins(bytes: &[u8], offset: usize, address: u64) -> Option<Instruction> {
     let ins = u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap());
-    disassemble_arm_ins(ins, offset)
+    disassemble_arm_ins(ins, address as usize + offset)
 }
 
 pub fn disassemble_arm(section: &Section, section_name: &String, _program: &Program) -> DisassemblySection {
     let mut offset = 0x0;
+    let address = section.addr;
     // let bytes = &[
     //     0xE1u8, 0xA0, 0x10, 0x00,
     //     0xE1, 0x80, 0x00, 0x00,
@@ -403,7 +486,7 @@ pub fn disassemble_arm(section: &Section, section_name: &String, _program: &Prog
     let mut instrs = Vec::<Instruction>::new();
     let bytes = section.bytes.as_slice();
     while offset < bytes.len() { 
-        let res = disassemble_ins(bytes, offset);
+        let res = disassemble_ins(bytes, offset, address);
         if res.is_some() {
             let ins = res.unwrap();
             offset += ins.ins_size as usize;

@@ -21,6 +21,7 @@ fn read_header(bytes: &[u8]) -> Header {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct HeaderCommon {
     e_type: u16,
     e_machine: u16,
@@ -82,23 +83,24 @@ fn machine_type_string(t: u16) -> &'static str {
 #[derive(PartialEq)]
 struct SectionType(u32);
 impl SectionType {
-    const NULL      : SectionType = SectionType(0x0);
-    const PROGBITS  : SectionType = SectionType(0x1);
+    // const NULL      : SectionType = SectionType(0x0);
+    // const PROGBITS  : SectionType = SectionType(0x1);
     const SYMTAB    : SectionType = SectionType(0x2);
-    const STRTAB    : SectionType = SectionType(0x3);
+    // const STRTAB    : SectionType = SectionType(0x3);
 }
 
-fn section_type_string(t: u32) -> &'static str {
-    match SectionType(t) {
-        SectionType::NULL       => "null",
-        SectionType::PROGBITS   => "program bits",
-        SectionType::STRTAB     => "string table",
-        SectionType::SYMTAB     => "symbol table",
-        _ => "unknown",
-    }
-}
+// fn section_type_string(t: u32) -> &'static str {
+//     match SectionType(t) {
+//         // SectionType::NULL       => "null",
+//         // SectionType::PROGBITS   => "program bits",
+//         // SectionType::STRTAB     => "string table",
+//         SectionType::SYMTAB     => "symbol table",
+//         _ => "unknown",
+//     }
+// }
 
 #[derive(Debug)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct ProgramHeaderEntry {
     p_type: u32,
     p_flags: u32,
@@ -111,6 +113,7 @@ struct ProgramHeaderEntry {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct SectionHeaderEntry {
     sh_name: u32,
     sh_type: u32,
@@ -125,6 +128,7 @@ struct SectionHeaderEntry {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 struct SymbolEntry {
     st_name: u32,
     st_value: u64,
@@ -294,6 +298,7 @@ fn get_strtab_ndx(bytes: &[u8], common_header: &HeaderCommon, section_headers: &
     None
 }
 
+#[allow(dead_code)] // TODO: Maybe remove this function in the future?
 fn abi_string(abi: u8) -> String {
     match abi {
         0x0 => format!("none"),
@@ -332,7 +337,7 @@ fn build_section_table(bytes: &[u8], common_header: &HeaderCommon, section_heade
     hashmap
 }
 
-fn build_program_table(common_header: &HeaderCommon, program_headers: &Vec<ProgramHeaderEntry>) -> Vec<Segment> {
+fn build_program_table(program_headers: &Vec<ProgramHeaderEntry>) -> Vec<Segment> {
     let mut v = Vec::<Segment>::new();
     for entry in program_headers {
         v.push(Segment {
@@ -377,7 +382,7 @@ fn build_program(bytes: &[u8], header: &Header, common_header: &HeaderCommon, pr
         endianess: if header.data == 0x1 { LITTLE_ENDIAN } else { BIG_ENDIAN },
         machine_type: machine_type_string(common_header.e_machine).to_string(),
         entry_point: common_header.e_entry,
-        program_table: build_program_table(common_header, program_headers),
+        program_table: build_program_table(program_headers),
         section_table: build_section_table(bytes, common_header, section_headers),
         symbol_table: build_symbol_table(bytes, common_header, section_headers, symbol_table) // TODO: Extract symbol info from .symtab section.
     }
@@ -427,15 +432,15 @@ pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
     } else {
         read_section_header_64(bytes, common_header.e_shnum, common_header.e_shentsize, common_header.e_shoff, header.data)
     };
-    println!("Section headers: count={}", common_header.e_shnum);
-    for entry in &section_headers {
-        println!("name={:<16} type={:<16} offset=0x{:08x}, size=0x{:08x}", 
-            shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
-            section_type_string(entry.sh_type),
-            entry.sh_offset,
-            entry.sh_size);
-    }
-    let strtabndx = get_strtab_ndx(bytes, &common_header, &section_headers);
+    // println!("Section headers: count={}", common_header.e_shnum);
+    // for entry in &section_headers {
+    //     println!("name={:<16} type={:<16} offset=0x{:08x}, size=0x{:08x}", 
+    //         shstring(bytes, section_headers[common_header.e_shstrndx as usize].sh_offset as u32 + entry.sh_name),
+    //         section_type_string(entry.sh_type),
+    //         entry.sh_offset,
+    //         entry.sh_size);
+    // }
+    // let strtabndx = get_strtab_ndx(bytes, &common_header, &section_headers);
     let mut symbol_table = Vec::<SymbolEntry>::new();
     for entry in &section_headers {
         if entry.sh_type == SectionType::SYMTAB.0 {
@@ -446,12 +451,12 @@ pub fn load_program_from_bytes(bytes: &[u8]) -> Program {
             });
         }
     }
-    println!("Symbols: count={}", symbol_table.len());
-    for entry in &symbol_table {
-        println!("name={:<16} value=0x{:08x}, size=0x{:08x}", 
-            shstring(bytes, section_headers[strtabndx.unwrap() as usize].sh_offset as u32 + entry.st_name),
-            entry.st_value,
-            entry.st_size);
-    }
+    // println!("Symbols: count={}", symbol_table.len());
+    // for entry in &symbol_table {
+    //     println!("name={:<16} value=0x{:08x}, size=0x{:08x}", 
+    //         shstring(bytes, section_headers[strtabndx.unwrap() as usize].sh_offset as u32 + entry.st_name),
+    //         entry.st_value,
+    //         entry.st_size);
+    // }
     build_program(bytes, &header, &common_header, &program_headers, &section_headers, &symbol_table)
 }

@@ -42,6 +42,7 @@ impl Operand {
 }
 
 // Common instruction struct for all architectures
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 pub struct Instruction {
     pub opcode: &'static str,
     pub operands: Vec<Operand>,
@@ -78,7 +79,7 @@ impl InstructionListing {
                     }
                     out += format!("    {:32}", ins.print()).as_str();
                     if let Some(b) = bytes {
-                        out += format!("({:02x}", b[ins.offset()]).as_str();
+                        out += format!("; ({:02x}", b[ins.offset()]).as_str();
                         for i in 1..ins.size() {
                             out += format!(" {:02x}", b[ins.offset() + i]).as_str();
                         }
@@ -90,7 +91,7 @@ impl InstructionListing {
                 for ins in instrs {
                     out += format!("    {:32}", ins.print()).as_str();
                     if let Some(b) = bytes {
-                        out += format!("({:02x}", b[ins.offset()]).as_str();
+                        out += format!("; ({:02x}", b[ins.offset()]).as_str();
                         for i in 1..ins.size() {
                             out += format!(" {:02x}", b[ins.offset() + i]).as_str();
                         }
@@ -101,15 +102,15 @@ impl InstructionListing {
             Self::Arm(instrs) => {
                 for ins in instrs {
                     for sym in &symbols {
-                        if sym.0 == addr + ins.offset() as u64 {
-                            out += format!("{}::\n", sym.1).as_str();
+                        if sym.0 == ins.offset() as u64 {
+                            out += format!("{}:\n", sym.1).as_str();
                         }
                     }
-                    out += format!("    {:32}", ins.print()).as_str();
+                    out += format!("_{:08x}:    {:32}", ins.offset(), ins.print()).as_str();
                     if let Some(b) = bytes {
-                        out += format!("({:02x}", b[ins.offset()]).as_str();
+                        out += format!("@ ({:02x}", b[ins.offset() - addr as usize]).as_str();
                         for i in 1..ins.size() {
-                            out += format!(" {:02x}", b[ins.offset() + i]).as_str();
+                            out += format!(" {:02x}", b[(ins.offset() - addr as usize) + i]).as_str();
                         }
                         out += ")\n";
                     }

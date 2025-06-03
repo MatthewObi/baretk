@@ -28,6 +28,7 @@ pub struct Symbol {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
 pub struct Program {
     pub bits: u8,
     pub endianess: u8,
@@ -39,6 +40,7 @@ pub struct Program {
 }
 
 impl Program {
+    #[allow(dead_code)] // TODO: Remove this and actually use the method
     pub fn find_section_and_segment(&self, addr: u64) -> (Option<&Section>, Option<&Segment>) {
         let mut section = Option::<&Section>::None;
         let mut segment = Option::<&Segment>::None;

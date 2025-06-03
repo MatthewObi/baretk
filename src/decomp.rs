@@ -4,7 +4,8 @@ use crate::dis::{self, Disassembly, Instruction};
 
 #[derive(Clone, Copy)]
 pub enum Language {
-    Pseudocode, // TODO: Add C decompilation target
+    Pseudocode, 
+    C, // TODO: Add C decompilation target
 }
 
 const OP_ADD: u8 = 0x0;
@@ -16,11 +17,11 @@ const OP_XOR: u8 = 0x5;
 
 enum Expr {
     Constant(i64),
-    Memory(i64),
+    // Memory(i64),
     Register(&'static str),
     Dereference(u8, Box<Expr>),
     Binary(u8, Box<Expr>, Box<Expr>),
-    Unary(u8, Box<Expr>),
+    // Unary(u8, Box<Expr>),
     Call(Box<Expr>),
     Store(Box<Expr>, Box<Expr>),
     Group(Vec<Box<Expr>>),
@@ -45,7 +46,7 @@ impl Expr {
                         4 => format!("*u32({})", (*rhs).print(0, lang)),
                         8 => format!("*u64({})", (*rhs).print(0, lang)),
                         _ => format!("*({})", (*rhs).print(0, lang))
-                    }
+                    },
                     _ => todo!("Other languages besides the pseudocode")
                 }
             },
@@ -88,12 +89,13 @@ impl Expr {
                 }
                 out.strip_suffix("\n").unwrap_or(out.as_str()).to_string()
             },
-            _ => todo!("Finish expression printing")
+            // _ => todo!("Finish expression printing")
         }).as_str();
         out
     }
 }
 
+#[allow(dead_code)] // TODO: Use this struct.
 struct ExprList {
     exprs: Vec<Expr>,
 }
@@ -169,6 +171,10 @@ fn expr_group(group: Vec<Box<Expr>>) -> Box<Expr> {
     Box::new(Expr::Group(group))
 }
 
+fn expr_call(callee: Box<Expr>) -> Box<Expr> {
+    Box::new(Expr::Call(callee))
+}
+
 fn expr_nop() -> Box<Expr> {
     Box::new(Expr::Nop)
 }
@@ -233,9 +239,9 @@ impl ExprBuilder {
         self.change_lists.get_mut(s).expect("").add_store(self.next_id);
     }
 
-    fn add_register_use(&mut self, s: &'static str) {
+    fn add_register_load(&mut self, s: &'static str) {
         self.add_change_list_if_not_created(s);
-        self.change_lists.get_mut(s).expect("").add_use(self.next_id);
+        self.change_lists.get_mut(s).expect("").add_load(self.next_id);
     }
 
     fn create_uses_in_expr(&mut self, expr: &Expr) {
@@ -246,7 +252,7 @@ impl ExprBuilder {
                     _ => (),
                 };
                 match **src {
-                    Expr::Register(r) => self.add_register_use(r),
+                    Expr::Register(r) => self.add_register_load(r),
                     _ => (),
                 };
             },
@@ -259,7 +265,7 @@ impl ExprBuilder {
         }
     }
 
-    fn decomp_instruction(&mut self, ins: &Instruction, expr_list: &Vec<Expr>) -> Expr {
+    fn decomp_instruction(&mut self, ins: &Instruction, _expr_list: &Vec<Expr>) -> Expr {
         match ins.opcode {
             "add" => { // op0 = op1 + op2
                 let dest = &ins.operands[0];
@@ -282,6 +288,14 @@ impl ExprBuilder {
                 let src1 = &ins.operands[1];
                 let src2 = &ins.operands[2];
                 let expr = expr_binary(OP_AND, 
+                    operand_to_expr(src1), operand_to_expr(src2));
+                *expr_store(operand_to_expr(dest), expr)
+            },
+            "or" => { // op0 = op1 | op2
+                let dest = &ins.operands[0];
+                let src1 = &ins.operands[1];
+                let src2 = &ins.operands[2];
+                let expr = expr_binary(OP_OR, 
                     operand_to_expr(src1), operand_to_expr(src2));
                 *expr_store(operand_to_expr(dest), expr)
             },
@@ -320,6 +334,12 @@ impl ExprBuilder {
                 self.create_uses_in_expr(&out);
                 *out
             },
+            "call" => { // TODO: Find call arguments and return value. Maybe use calling convention and function analysis to detect this?
+                let callee = &ins.operands[0];
+                let out = expr_call(operand_to_expr(callee));
+                self.create_uses_in_expr(&out);
+                *out
+            },
             "nop" => *expr_nop(),
             "ret" => *expr_ret(),
             _ => todo!("need to implement {} decompilation", ins.opcode)
@@ -327,13 +347,17 @@ impl ExprBuilder {
     }
 }
 
-fn decomp_disassembly(dis: &Disassembly) -> Vec<Expr> {
+fn decomp_disassembly(dis: &Disassembly, out_lang: &str) -> Vec<Expr> {
     let instrs = dis.section().instructions.instruction_vec();
+    let lang = match out_lang {
+        "c"         => Language::C,
+        _           => Language::Pseudocode,
+    };
     let mut expr_list = Vec::<Expr>::new();
     let mut expr_builder = ExprBuilder { change_lists: HashMap::<&str, ChangeList>::new(), next_id: 1 };
     for instr in instrs {
         let expr = expr_builder.decomp_instruction(&instr, &expr_list);
-        println!("{} // {}", expr.print(0, Language::Pseudocode), instr.print());
+        println!("{} // {}", expr.print(0, lang), instr.print());
         expr_list.push(expr);
         expr_builder.next_id += 1;
     }
@@ -346,6 +370,6 @@ pub fn decomp_program_from_bytes(bytes: &[u8], dest_lang: Language) -> Decomp {
 }
 
 pub fn decomp_program(dis: Disassembly, dest_lang: Language) -> Decomp {
-    let expr_list = decomp_disassembly(&dis);
+    let expr_list = decomp_disassembly(&dis, "");
     Decomp { disassembly: dis, dest_lang, expr_list }
 }

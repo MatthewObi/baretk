@@ -145,28 +145,28 @@ enum Operation {
 enum Operand {
     Nothing,
     Reg(u8),
-    ImmU8(u8),
+    // ImmU8(u8),
     ImmU16(u16),
     ImmU32(u32),
-    ImmU64(u64),
-    ImmS8(i8),
+    // ImmU64(u64),
+    // ImmS8(i8),
     ImmS16(i16),
     ImmS32(i32),
-    ImmS64(i64),
+    // ImmS64(i64),
 }
 
 impl Operand {
     fn is_zero(self) -> bool {
         match self {
             Self::Reg(r) => r == 0,
-            Self::ImmU8(x) => x == 0,
+            // Self::ImmU8(x) => x == 0,
             Self::ImmU16(x) => x == 0,
             Self::ImmU32(x) => x == 0,
-            Self::ImmU64(x) => x == 0,
-            Self::ImmS8(x) => x == 0,
+            // Self::ImmU64(x) => x == 0,
+            // Self::ImmS8(x) => x == 0,
             Self::ImmS16(x) => x == 0,
             Self::ImmS32(x) => x == 0,
-            Self::ImmS64(x) => x == 0,
+            // Self::ImmS64(x) => x == 0,
             _ => false,
         }
     }
@@ -180,10 +180,10 @@ impl Operand {
 
     fn value(self) -> i64 {
         match self {
-            Self::ImmS8(x) => x.into(),
+            // Self::ImmS8(x) => x.into(),
             Self::ImmS16(x) => x.into(),
             Self::ImmS32(x) => x.into(),
-            Self::ImmS64(x) => x,
+            // Self::ImmS64(x) => x,
             _ => 0,
         }
     }
@@ -191,14 +191,14 @@ impl Operand {
     fn print(self) -> String {
         match self {
             Self::Reg(r) => Register(r).name().to_string(),
-            Self::ImmU8(x) => x.to_string(),
+            // Self::ImmU8(x) => x.to_string(),
             Self::ImmU16(x) => x.to_string(),
             Self::ImmU32(x) => x.to_string(),
-            Self::ImmU64(x) => x.to_string(),
-            Self::ImmS8(x) => x.to_string(),
+            // Self::ImmU64(x) => x.to_string(),
+            // Self::ImmS8(x) => x.to_string(),
             Self::ImmS16(x) => x.to_string(),
             Self::ImmS32(x) => x.to_string(),
-            Self::ImmS64(x) => x.to_string(),
+            // Self::ImmS64(x) => x.to_string(),
             _ => "???".to_string(),
         }
     }
@@ -206,20 +206,21 @@ impl Operand {
     fn into(self) -> dis::Operand {
         match self {
             Self::Reg(r) => dis::Operand::Register(Register(r).name()),
-            Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
+            // Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
             Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
             Self::ImmU32(x) =>  dis::Operand::Immediate(x.into()),
-            Self::ImmU64(x) =>  dis::Operand::Immediate(x as i64),
-            Self::ImmS8(x) =>  dis::Operand::Immediate(x.into()),
+            // Self::ImmU64(x) =>  dis::Operand::Immediate(x as i64),
+            // Self::ImmS8(x) =>  dis::Operand::Immediate(x.into()),
             Self::ImmS16(x) =>  dis::Operand::Immediate(x.into()),
             Self::ImmS32(x) =>  dis::Operand::Immediate(x.into()),
-            Self::ImmS64(x) =>  dis::Operand::Immediate(x.into()),
+            // Self::ImmS64(x) =>  dis::Operand::Immediate(x.into()),
             Self::Nothing => dis::Operand::Nothing,
         }
     }
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)] // TODO: Remove this and actually use unused fields
 pub struct Instruction {
     operation: Operation,
     rd: Operand,
