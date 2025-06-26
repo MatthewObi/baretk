@@ -1,4 +1,4 @@
-use crate::{dis::{DisassemblySection}, prog::{Program, Section}};
+use crate::{decomp::{self, expr_binary, expr_if, expr_call, expr_group, expr_constant, expr_dereference, expr_goto, expr_nop, expr_register, expr_ret, expr_store}, dis::{DisassemblySection}, prog::{Program, Section}};
 use crate::util::BitExtr;
 
 fn cond(x: u32) -> u32 {
@@ -193,6 +193,56 @@ impl Operand {
             _ => 0,
         }
     }
+
+    fn into_expr(self) -> Box<decomp::Expr> {
+        match self {
+            Self::Reg(r, s, st) => {
+                if s != 0 {
+                    let lhs = expr_register(
+                        if r == REG_SP {
+                            format!("sp")
+                        }
+                        else if r == REG_LR {
+                            format!("lr")
+                        }
+                        else if r == REG_PC {
+                            format!("pc")
+                        }
+                        else {
+                            format!("r{}", r)
+                        }
+                    );
+                    let rhs = expr_constant(s as i64);
+                    match st {
+                        ST_LSL => expr_binary(decomp::OP_LSL, lhs, rhs),
+                        ST_LSR => expr_binary(decomp::OP_LSR, lhs, rhs),
+                        ST_ASR => expr_binary(decomp::OP_ASR, lhs, rhs),
+                        ST_ROR => expr_binary(decomp::OP_ROR, lhs, rhs),
+                        _ => expr_nop()
+                    }
+                }
+                else {
+                    expr_register(
+                        if r == REG_SP {
+                            format!("sp")
+                        }
+                        else if r == REG_LR {
+                            format!("lr")
+                        }
+                        else if r == REG_PC {
+                            format!("pc")
+                        }
+                        else {
+                            format!("r{}", r)
+                        }
+                    )
+                }
+            },
+            Self::Imm(..) => expr_constant(self.value()),
+            Self::SImm(..) => expr_constant(self.value()),
+            _ => expr_nop(),
+        }
+    }
 }
 
 fn op2(x: u32) -> Operand {
@@ -216,6 +266,7 @@ fn bl_offset(x: u32) -> i32 {
     ((x as i32).bextr(23, 0)) << 2
 }
 
+#[derive(Clone, Copy)]
 enum Opcode {
     Unknown,
     Bx(Operand),
@@ -248,6 +299,7 @@ enum Opcode {
     Swi,
 }
 
+#[derive(Clone, Copy)]
 pub struct Instruction {
     opcode: Opcode,
     offset: usize,
@@ -321,6 +373,138 @@ impl Instruction {
 
     pub fn size(&self) -> usize {
         self.ins_size as usize
+    }
+}
+
+fn cond_run_instr(ins: &Instruction, expr: Box<decomp::Expr>) -> Box<decomp::Expr> {
+    match ins.cond {
+        COND_EQ => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(1)), expr),
+        COND_NE => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(0)), expr),
+        COND_CS => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_C".to_string()), expr_constant(1)), expr),
+        COND_CC => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_C".to_string()), expr_constant(0)), expr),
+        COND_MI => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_N".to_string()), expr_constant(1)), expr),
+        COND_PL => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_N".to_string()), expr_constant(0)), expr),
+        COND_VS => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_V".to_string()), expr_constant(1)), expr),
+        COND_VC => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_V".to_string()), expr_constant(0)), expr),
+        COND_HI => expr_if(expr_binary(decomp::OP_ANDAND, 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_C".to_string()), expr_constant(1)), 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(0))), expr),
+        COND_LS => expr_if(expr_binary(decomp::OP_OROR, 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_C".to_string()), expr_constant(0)), 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(1))), expr),
+        COND_GE => expr_if(expr_binary(decomp::OP_EQ, expr_register("cpsr_N".to_string()), expr_register("cpsr_V".to_string())), expr),
+        COND_LT => expr_if(expr_binary(decomp::OP_NEQ, expr_register("cpsr_N".to_string()), expr_register("cpsr_V".to_string())), expr),
+        COND_GT => expr_if(expr_binary(decomp::OP_ANDAND, 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(0)), 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_N".to_string()), expr_register("cpsr_V".to_string()))), expr),
+        COND_LE => expr_if(expr_binary(decomp::OP_OROR, 
+            expr_binary(decomp::OP_EQ, expr_register("cpsr_Z".to_string()), expr_constant(1)), 
+            expr_binary(decomp::OP_NEQ, expr_register("cpsr_N".to_string()), expr_register("cpsr_V".to_string()))), expr),
+        _ => expr_if(expr_constant(0), expr),
+    }
+}
+
+impl Instruction {
+    pub fn into_expr(&self) -> Box<decomp::Expr> {
+        match self.opcode {
+            Opcode::Add(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_ADD, lhs, rhs))
+            },
+            Opcode::Adc(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_ADD, expr_binary(decomp::OP_ADD, lhs, rhs), expr_register("cpsr_C".to_string())))
+            },
+            Opcode::Sub(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_SUB, lhs, rhs))
+            },
+            Opcode::And(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_AND, lhs, rhs))
+            },
+            Opcode::Orr(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_OR, lhs, rhs))
+            },
+            Opcode::Eor(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                expr_store(dst, expr_binary(decomp::OP_XOR, lhs, rhs))
+            },
+            Opcode::Ldr(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                let expr = expr_store(dst, expr_dereference(4, expr_binary(decomp::OP_ADD, lhs, rhs)));
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            Opcode::Str(rd, op1, op2)  => {
+                let dst = rd.into_expr();
+                let lhs = op1.into_expr();
+                let rhs = op2.into_expr();
+                let expr = expr_store(expr_dereference(4, expr_binary(decomp::OP_ADD, lhs, rhs)), dst);
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            Opcode::Cmp(ra, rb)  => {
+                let lhs = ra.into_expr();
+                let rhs = rb.into_expr();
+                let mut group = Vec::<Box<decomp::Expr>>::new();
+                group.push(expr_store(expr_register("cpsr_Z".to_string()), expr_binary(decomp::OP_EQ, lhs.clone(), rhs.clone())));
+                group.push(expr_store(expr_register("cpsr_C".to_string()), expr_binary(decomp::OP_GTE, lhs.clone(), rhs.clone())));
+                group.push(expr_store(expr_register("cpsr_N".to_string()), expr_binary(decomp::OP_LT, expr_binary(decomp::OP_SUB, lhs.clone(), rhs.clone()), expr_constant(0))));
+                group.push(expr_store(expr_register("cpsr_V".to_string()), expr_binary(decomp::OP_GT, expr_binary(decomp::OP_SUB, lhs.clone(), rhs.clone()), expr_constant(0))));
+                expr_group(group)
+            },
+            Opcode::Tst(ra, rb)  => {
+                let lhs = ra.into_expr();
+                let rhs = rb.into_expr();
+                let mut group = Vec::<Box<decomp::Expr>>::new();
+                group.push(expr_store(expr_register("cpsr_Z".to_string()), expr_binary(decomp::OP_EQ, expr_binary(decomp::OP_AND, lhs.clone(), rhs.clone()), expr_constant(0))));
+                group.push(expr_store(expr_register("cpsr_C".to_string()), expr_constant(0)));
+                group.push(expr_store(expr_register("cpsr_N".to_string()), expr_binary(decomp::OP_LT, expr_binary(decomp::OP_AND, lhs.clone(), rhs.clone()), expr_constant(0))));
+                group.push(expr_store(expr_register("cpsr_V".to_string()), expr_constant(0)));
+                expr_group(group)
+            },
+            Opcode::B(rn) => {
+                let expr = expr_goto(expr_constant(self.offset as i64 + 0x8 + rn.value()));
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            Opcode::Bl(rn) => {
+                let expr = expr_call(expr_constant(self.offset as i64 + 0x8 + rn.value()));
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            Opcode::Mov(rd, rs) => {
+                let expr = expr_store(rd.into_expr(), rs.into_expr());
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            Opcode::Bx(rn) => {
+                let expr = if match rn { Operand::Reg(r, _, _) => r, _ => 0 } == REG_LR {
+                    expr_ret()
+                } else {
+                    expr_goto(rn.into_expr())
+                };
+                if self.cond == COND_AL { return expr; }
+                cond_run_instr(self, expr)
+            },
+            _ => expr_register(format!("nop // {}", self.print()))
+        }
     }
 }
 

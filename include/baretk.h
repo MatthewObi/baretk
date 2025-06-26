@@ -26,6 +26,9 @@ typedef struct BARETK_Program* BARETK_Program;
 /// @brief Opaque pointer to disassembly.
 typedef struct BARETK_Disassembly* BARETK_Disassembly;
 
+/// @brief Opaque pointer to decompilation.
+typedef struct BARETK_Decomp* BARETK_Decomp;
+
 /// @brief Endianess enum value
 typedef enum BARETK_Endianess {
     BARETK_LITTLE_ENDIAN = 0x1,
@@ -38,6 +41,12 @@ typedef enum BARETK_Perm {
     PERM_RWX_WRITE = 0x2,
     PERM_RWX_READ = 0x4,
 } BARETK_Perm;
+
+/// @brief Language enum value
+typedef enum BARETK_Lang {
+    BARETK_LANG_PSEUDO = 0,
+    BARETK_LANG_C = 1,
+} BARETK_Lang;
 
 typedef struct BARETK_Segment {
     uint8_t perm;
@@ -128,6 +137,31 @@ const BARETK_Program baretk_get_program_from_disassembly(const BARETK_Disassembl
 /// @param disasm The pointer to the disassembly.
 /// @note Checks for NULL, but does not check for previously freed disassembly!
 void baretk_free_disassembly(BARETK_Disassembly disasm);
+
+/// Decompiles a disassembly to a specified language.
+/// @param disasm The pointer to the disassembly.
+/// @return An opaque pointer to the decomp data structure, or NULL if load was unsuccessful. Must free the decomp with 
+/// ``baretk_free_decomp()`` when done. 
+/// @note The decomp will take ownership of the disassembly passed into this function, and the
+/// pointer will become invalid. To get the disassembly data again, pass the decomp into ``baretk_get_disassembly_from_decomp()``
+BARETK_Decomp baretk_decomp_disassembly(BARETK_Disassembly disasm, BARETK_Lang lang);
+
+/// Loads a program from a file and decompiles it.
+/// @param path The path to the binary file to load.
+/// @return An opaque pointer to the decomp data structure, or NULL if load was unsuccessful. Must free the decomp with 
+/// ``baretk_free_decomp()`` when done.
+BARETK_Disassembly baretk_decomp_from_file(const char* file);
+
+/// Returns an opaque pointer to the disassembly associated with a decomp.
+/// @param decomp The pointer to the decomp.
+/// @return An opaque pointer to the disassembly, or NULL if the decomp is NULL.
+/// @note The pointer returned by this function is owned by the decomp. Do not pass it to ``baretk_free_disassembly()``!
+const BARETK_Disassembly baretk_get_disassembly_from_decomp(const BARETK_Decomp decomp);
+
+/// Frees the data of a decomp.
+/// @param decomp The pointer to the decomp.
+/// @note Checks for NULL, but does not check for previously freed decomp!
+void baretk_free_decomp(BARETK_Decomp disasm);
 
 #endif // BARETK_H_INCLUDED
 

@@ -3,60 +3,38 @@ use crate::arm;
 use crate::x86;
 use crate::riscv;
 
-pub enum Operand {
-    Nothing,
-    Register(&'static str),
-    Memory(&'static str, &'static str, i64, u8),
-    Immediate(i64),
-}
-
-impl Operand {
-    pub fn print(&self) -> String {
-        match *self {
-            Operand::Register(name) => format!("{}", name),
-            Operand::Memory(base, index, offset, size) => {
-                let word_name = match size {
-                    1 => "BYTE",
-                    2 => "WORD",
-                    4 => "DWORD",
-                    8 => "QWORD",
-                    _ => "?"
-                };
-                if base == "" {
-                    format!("{} [{}]", word_name, offset)
-                }
-                else if base == "." {
-                    format!("{} [pc+{}]", word_name, offset)
-                }
-                else if index != "" {
-                    format!("{} [{}+{}*{}]", word_name, base, index, offset)
-                }
-                else {
-                    format!("{} [{}+{}]", word_name, base, offset)
-                }
-            },
-            Operand::Immediate(i) => format!("{}", i),
-            _ => format!("()")
-        }
-    }
-}
-
-// Common instruction struct for all architectures
-#[allow(dead_code)] // TODO: Remove this and actually use the unused fields
-pub struct Instruction {
-    pub opcode: &'static str,
-    pub operands: Vec<Operand>,
-    pub flags: u64,
+pub enum Instruction {
+    Rv(riscv::Instruction),
+    X86(x86::Instruction),
+    Arm(arm::Instruction),
+    // Unknown
 }
 
 impl Instruction {
-    pub fn print(&self) -> String {
-        let mut str = format!("{}", self.opcode);
-        for operand in self.operands.as_slice() {
-            str += format!(" {},", operand.print()).as_str()
+    // pub fn print(&self) -> String {
+    //     return match self {
+    //         Instruction::Rv(rv) => rv.print(),
+    //         Instruction::X86(x86) => x86.print(),
+    //         Instruction::Arm(arm) => arm.print(),
+    //         // _ => format!("???"),
+    //     }
+    // }
+    pub fn offset(&self) -> usize {
+        return match self {
+            Instruction::Rv(rv) => rv.offset(),
+            Instruction::X86(x86) => x86.offset(),
+            Instruction::Arm(arm) => arm.offset(),
+            // _ => 0,
         }
-        str.strip_suffix(",").unwrap_or(str.as_str()).to_string()
     }
+    // pub fn size(&self) -> usize {
+    //     return match self {
+    //         Instruction::Rv(rv) => rv.size(),
+    //         Instruction::X86(x86) => x86.size(),
+    //         Instruction::Arm(arm) => arm.size(),
+    //         // _ => 0,
+    //     }
+    // }
 }
 
 pub enum InstructionListing {
@@ -127,14 +105,21 @@ impl InstructionListing {
             Self::Rv(rv) => { 
                 let iter = rv.into_iter();
                 for it in iter {
-                    out.push(it.into());
+                    out.push(Instruction::Rv(*it));
                 }
                 out
             },
             Self::X86(rv) => { 
                 let iter = rv.into_iter();
                 for it in iter {
-                    out.push(it.into());
+                    out.push(Instruction::X86(*it));
+                }
+                out
+            },
+            Self::Arm(rv) => { 
+                let iter = rv.into_iter();
+                for it in iter {
+                    out.push(Instruction::Arm(*it));
                 }
                 out
             },

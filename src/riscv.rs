@@ -1,4 +1,5 @@
-use crate::dis::{self, DisassemblySection};
+use crate::decomp;
+use crate::dis::{DisassemblySection};
 use crate::prog::{Section, Program};
 use crate::util::{i32_sign, BitExtr};
 
@@ -203,18 +204,14 @@ impl Operand {
         }
     }
 
-    fn into(self) -> dis::Operand {
+    fn into_expr(&self) -> Box<decomp::Expr> {
         match self {
-            Self::Reg(r) => dis::Operand::Register(Register(r).name()),
-            // Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmU32(x) =>  dis::Operand::Immediate(x.into()),
-            // Self::ImmU64(x) =>  dis::Operand::Immediate(x as i64),
-            // Self::ImmS8(x) =>  dis::Operand::Immediate(x.into()),
-            Self::ImmS16(x) =>  dis::Operand::Immediate(x.into()),
-            Self::ImmS32(x) =>  dis::Operand::Immediate(x.into()),
-            // Self::ImmS64(x) =>  dis::Operand::Immediate(x.into()),
-            Self::Nothing => dis::Operand::Nothing,
+            Self::Reg(r) => decomp::expr_register(Register(*r).name().to_string()),
+            Self::ImmU16(x) => decomp::expr_constant(*x as i64),
+            Self::ImmU32(x) => decomp::expr_constant(*x as i64),
+            Self::ImmS16(x) => decomp::expr_constant(*x as i64),
+            Self::ImmS32(x) => decomp::expr_constant(*x as i64),
+            _ => decomp::expr_nop(),
         }
     }
 }
@@ -351,39 +348,188 @@ impl Instruction {
         self.ins_size as usize
     }
 
-    pub fn into(&self) -> dis::Instruction {
+    pub fn into_expr(&self) -> Box<decomp::Expr> {
         match self.operation {
-            Operation::Add   => dis::Instruction { opcode: "add", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
-            Operation::Sub   => dis::Instruction { opcode: "sub", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
-            Operation::And   => dis::Instruction { opcode: "and", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
-            Operation::Or    => dis::Instruction { opcode: "or", operands: vec![self.rd.into(), self.rs1.into(), self.rs2.into()], flags: 0 },
-            Operation::Addi  => dis::Instruction { opcode: "add", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Andi  => dis::Instruction { opcode: "and", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Ori   => dis::Instruction { opcode: "or", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Xori  => dis::Instruction { opcode: "xor", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lbu   => dis::Instruction { opcode: "lbu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lb    => dis::Instruction { opcode: "lb", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lhu   => dis::Instruction { opcode: "lhu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lh    => dis::Instruction { opcode: "lh", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lwu   => dis::Instruction { opcode: "lwu", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Lw    => dis::Instruction { opcode: "lw", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Ld    => dis::Instruction { opcode: "ld", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Sb    => dis::Instruction { opcode: "sb", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Sh    => dis::Instruction { opcode: "sh", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Sw    => dis::Instruction { opcode: "sw", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Sd    => dis::Instruction { opcode: "sd", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Jal   => dis::Instruction { opcode: "jal", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
-            Operation::Jalr  => dis::Instruction { opcode: "jalr", operands: vec![self.rd.into(), self.rs1.into(), self.imm.into()], flags: 0 },
-            Operation::Auipc => dis::Instruction { opcode: "auipc", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
-            Operation::Lui   => dis::Instruction { opcode: "lui", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
-            Operation::Li    => dis::Instruction { opcode: "mov", operands: vec![self.rd.into(), self.imm.into()], flags: 0 },
-            Operation::Blt   => dis::Instruction { opcode: "blt", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            Operation::Beq   => dis::Instruction { opcode: "beq", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            Operation::Bne   => dis::Instruction { opcode: "bne", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            Operation::Bltu  => dis::Instruction { opcode: "bltu", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            Operation::Bge   => dis::Instruction { opcode: "bge", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            Operation::Bgeu  => dis::Instruction { opcode: "bgeu", operands: vec![self.rs1.into(), self.rs2.into(), self.imm.into()], flags: 0 },
-            _  => dis::Instruction { opcode: "unk", operands: vec![], flags: 0 },
+            Operation::Add   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::Sub   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_SUB, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::Xor   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_XOR, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::And   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_AND, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::Or    => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_OR, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::Slt   => decomp::expr_nop(), //format!("slt {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sltu  => decomp::expr_nop(), //format!("sltu {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sll   => decomp::expr_nop(), //format!("sll {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Srl   => decomp::expr_nop(), //format!("srl {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sra   => decomp::expr_nop(), //format!("sra {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Mul   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_MUL, self.rs1.into_expr(), self.rs2.into_expr())),
+            Operation::Addi  => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.imm.into_expr())),
+            Operation::Xori  => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_XOR, self.rs1.into_expr(), self.imm.into_expr())),
+            Operation::Ori   => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_OR, self.rs1.into_expr(), self.imm.into_expr())),
+            Operation::Andi  => decomp::expr_store(self.rd.into_expr(), decomp::expr_binary(decomp::OP_AND, self.rs1.into_expr(), self.imm.into_expr())),
+            Operation::Slti  => decomp::expr_nop(), // format!("slti {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Sltui => decomp::expr_nop(), // format!("sltui {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            // Operation::Addiw => if self.imm.is_zero() {
+            //     format!("sext.w {}, {}", self.rd.print(), self.rs1.print())
+            // } else {
+            //     format!("addiw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print())
+            // },
+            Operation::Slli  => decomp::expr_nop(), //format!("slli {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srli  => decomp::expr_nop(), //format!("srli {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srai  => decomp::expr_nop(), //format!("srai {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Slliw => decomp::expr_nop(), //format!("slliw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Srliw => decomp::expr_nop(), //format!("srliw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Sraiw => decomp::expr_nop(), //format!("sraiw {}, {}, {}", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Addw  => decomp::expr_nop(), //format!("addw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Subw  => decomp::expr_nop(), //format!("subw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sllw  => decomp::expr_nop(), //format!("sllw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Srlw  => decomp::expr_nop(), //format!("srlw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Sraw  => decomp::expr_nop(), //format!("sraw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Mulw  => decomp::expr_nop(), //format!("mulw {}, {}, {}", self.rd.print(), self.rs1.print(), self.rs2.print()),
+            Operation::Lbu   => decomp::expr_nop(), //format!("lbu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Lhu   => decomp::expr_nop(), //format!("lhu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Lwu   => decomp::expr_nop(), //format!("lwu {}, [{}{:+}]", self.rd.print(), self.rs1.print(), self.imm.print()),
+            Operation::Lb    => if self.imm.is_zero() { 
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(1, self.rs2.into_expr()))
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.imm.into_expr());
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(1, rhs))
+            },
+            Operation::Lh    => if self.imm.is_zero() { 
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(2, self.rs1.into_expr()))
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.imm.into_expr());
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(2, rhs))
+            },
+            Operation::Lw    => if self.imm.is_zero() { 
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(4, self.rs1.into_expr()))
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.imm.into_expr());
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(4, rhs))
+            },
+            Operation::Ld    => if self.imm.is_zero() { 
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(8, self.rs1.into_expr()))
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs1.into_expr(), self.imm.into_expr());
+                decomp::expr_store(self.rd.into_expr(), decomp::expr_dereference(8, rhs))
+            },
+            Operation::Sb    => if self.imm.is_zero() { 
+                decomp::expr_store(decomp::expr_dereference(1, self.rs2.into_expr()), self.rs1.into_expr())
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs2.into_expr(), self.imm.into_expr());
+                decomp::expr_store(decomp::expr_dereference(1, rhs), self.rs1.into_expr())
+            },
+            Operation::Sh    => if self.imm.is_zero() { 
+                decomp::expr_store(decomp::expr_dereference(2, self.rs2.into_expr()), self.rs1.into_expr())
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs2.into_expr(), self.imm.into_expr());
+                decomp::expr_store(decomp::expr_dereference(2, rhs), self.rs1.into_expr())
+            },
+            Operation::Sw    => if self.imm.is_zero() { 
+                decomp::expr_store(decomp::expr_dereference(4, self.rs2.into_expr()), self.rs1.into_expr())
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs2.into_expr(), self.imm.into_expr());
+                decomp::expr_store(decomp::expr_dereference(4, rhs), self.rs1.into_expr())
+            },
+            Operation::Sd    => if self.imm.is_zero() { 
+                decomp::expr_store(decomp::expr_dereference(8, self.rs2.into_expr()), self.rs1.into_expr()) // format!("sd {}, [{}]", self.rs1.print(), self.rs2.print())
+            } else {
+                let rhs = decomp::expr_binary(decomp::OP_ADD, self.rs2.into_expr(), self.imm.into_expr());
+                decomp::expr_store(decomp::expr_dereference(8, rhs), self.rs1.into_expr()) // format!("sd {}, [{} {} {}]", self.rs1.print(), self.rs2.print(), i32_sign(self.imm.value() as i32), self.imm.print())
+            },
+            Operation::Li    => decomp::expr_store(self.rd.into_expr(), self.imm.into_expr()), // format!("li {}, {}", self.rd.print(), self.imm.print()),
+            Operation::Lui   => decomp::expr_store(self.rd.into_expr(), self.imm.into_expr()), // format!("lui {}, {}", self.rd.print(), self.imm.print()),
+            Operation::Auipc => decomp::expr_store(self.rd.into_expr(), 
+                decomp::expr_binary(decomp::OP_ADD,
+                    decomp::expr_binary(decomp::OP_AND, 
+                        decomp::expr_register(String::from("pc")), 
+                        decomp::expr_constant(0xfffffffffff00000u64 as i64)), 
+                    self.imm.into_expr())), // format!("auipc {}, {}", self.rd.print(), self.imm.print()),
+            Operation::Jal   => {
+                if self.rd.is_zero() {
+                     decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from("pc")),
+                        self.imm.into_expr()))
+                } else {
+                    if self.rd.is_register(Register::RA) {
+                        return decomp::expr_call(decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr()));
+                    }
+                    decomp::expr_special("jal", vec![
+                        self.rd.into_expr(), 
+                        decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr())])
+                }
+            },
+            Operation::Jalr  => {
+                if self.rd.is_zero() {
+                    if self.rs1.is_register(Register::RA) {
+                        return decomp::expr_ret();
+                    }
+                    return decomp::expr_goto(self.rs1.into_expr())
+                } else {
+                    if self.rd.is_register(Register::RA) {
+                        return decomp::expr_call(self.rs1.into_expr());
+                    }
+                    return decomp::expr_special("jal", vec![self.rd.into_expr(), self.rs1.into_expr()])
+                }
+            },
+            Operation::Beq   => {
+                if self.rs2.is_zero() {
+                    decomp::expr_if(
+                        decomp::expr_binary(decomp::OP_EQ, 
+                            self.rs1.into_expr(),
+                            decomp::expr_constant(0)),
+                        decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr())))
+                } else {
+                    decomp::expr_if(
+                        decomp::expr_binary(decomp::OP_EQ, 
+                            self.rs1.into_expr(),
+                            self.rs2.into_expr()),
+                        decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr())))
+                }
+            },
+            Operation::Bne   => {
+                if self.rs2.is_zero() {
+                    decomp::expr_if(
+                        decomp::expr_binary(decomp::OP_NEQ, 
+                            self.rs1.into_expr(),
+                            decomp::expr_constant(0)),
+                        decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr())))
+                } else {
+                    decomp::expr_if(
+                        decomp::expr_binary(decomp::OP_NEQ, 
+                            self.rs1.into_expr(),
+                            self.rs2.into_expr()),
+                        decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                            decomp::expr_register(String::from("pc")),
+                            self.imm.into_expr())))
+                }
+            },
+            Operation::Blt   => decomp::expr_if(
+                decomp::expr_binary(decomp::OP_LT, 
+                    self.rs1.into_expr(),
+                    self.rs2.into_expr()),
+                decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                    decomp::expr_register(String::from("pc")),
+                    self.imm.into_expr()))),
+            Operation::Bge   => decomp::expr_if(
+                decomp::expr_binary(decomp::OP_GTE, 
+                    self.rs1.into_expr(),
+                    self.rs2.into_expr()),
+                decomp::expr_goto(decomp::expr_binary(decomp::OP_ADD, 
+                    decomp::expr_register(String::from("pc")),
+                    self.imm.into_expr()))),
+            // Operation::Bltu  => format!("bltu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
+            // Operation::Bgeu  => format!("bgeu {}, {}, {}", self.rs1.print(), self.rs2.print(), self.imm.print()),
+            // Operation::Unknown => format!("???"),
+            _ => decomp::expr_nop(), // format!("unknown")
         }
     }
 }
@@ -1034,26 +1180,25 @@ fn disassemble_16(ins: u16, offset: usize) -> Option<Instruction> {
 }
 
 fn disassemble_instruction(bytes: &[u8], offset: usize) -> Option<Instruction> {
-    let ins = u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap());
+    let ins = u16::from_le_bytes(bytes[offset..offset+2].try_into().unwrap());
     if (ins & 3) == 3 {
-        return disassemble_32(ins, offset)
+        return disassemble_32(u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap()), offset)
     }
-    disassemble_16(u16::from_le_bytes(bytes[offset..offset+2].try_into().unwrap()), offset)
+    disassemble_16(ins, offset)
 }
 
 pub fn disassemble_riscv(section: &Section, section_name: &String, _program: &Program) -> DisassemblySection {
     let mut instrs = Vec::<Instruction>::new();
     let mut offset: usize = 0;
-    let limit = 32usize;
     let bytes = section.bytes.as_slice();
-    while offset + 4 < limit {
+    while offset + 2 <= bytes.len() {
         let instr = disassemble_instruction(bytes, offset);
         if instr.is_some() {
             let ins = instr.unwrap();
             offset += ins.ins_size as usize;
             instrs.push(ins);
         }
-        else if offset + 4 < limit && (u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap()) & 3) == 3 {
+        else if offset + 4 <= bytes.len() && (u32::from_le_bytes(bytes[offset..offset+4].try_into().unwrap()) & 3) == 3 {
             instrs.push(Instruction { operation: Operation::Unknown,
                 rd: Operand::Nothing,
                 rs1: Operand::Nothing,

@@ -1,4 +1,5 @@
-use crate::dis::{self, DisassemblySection};
+use crate::decomp;
+use crate::dis::{DisassemblySection};
 use crate::prog::{Section, Program};
 use crate::util::i32_sign;
 
@@ -262,31 +263,145 @@ impl Operand {
         }
     }
 
-    fn into(self) -> dis::Operand {
+    pub fn into_expr(self) -> Box<decomp::Expr> {
         match self {
-            Self::Reg8(x)  => dis::Operand::Register(print_reg(0x0, x)),
-            Self::Reg8H(x) => dis::Operand::Register(print_reg(0x4, x)),
-            Self::Reg16(x) => dis::Operand::Register(print_reg(0x1, x)),
-            Self::Reg32(x) => dis::Operand::Register(print_reg(0x2, x)),
-            Self::Reg64(x) => dis::Operand::Register(print_reg(0x3, x)),
-            Self::ImmU8(x) => dis::Operand::Immediate(x.into()),
-            // Self::ImmU16(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmU32(x) => dis::Operand::Immediate(x.into()),
-            Self::ImmS8(x) => dis::Operand::Immediate(x.into()),
-            // Self::ImmS32(x) => dis::Operand::Immediate(x.into()),
-            Self::PtrRegByte(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 1),
-            Self::PtrRegWord(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 2),
-            Self::PtrRegDword(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 4),
-            Self::PtrRegQword(reg, offset) => dis::Operand::Memory(print_reg(0x3, reg), "", offset.into(), 8),
-            Self::PtrRelByte(rel) => dis::Operand::Memory(".", "", rel.into(), 1),
-            Self::PtrRelWord(rel) => dis::Operand::Memory(".", "", rel.into(), 2),
-            Self::PtrRelDword(rel) => dis::Operand::Memory(".", "", rel.into(), 4),
-            Self::PtrRelQword(rel) => dis::Operand::Memory(".", "", rel.into(), 8),
-            Self::PtrRegRegByte(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x0, offset), 0x0, 1),
-            Self::PtrRegRegWord(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x1, offset), 0x0, 2),
-            Self::PtrRegRegDword(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x2, offset), 0x0, 4),
-            Self::PtrRegRegQword(base, offset, _mul) => dis::Operand::Memory(print_reg(0x3, base), print_reg(0x3, offset), 0x0, 8),
-            Self::Nothing => dis::Operand::Nothing,
+            Self::ImmU8(x)  => decomp::expr_constant(x as i64),
+            Self::ImmU32(x)  => decomp::expr_constant(x as i64),
+            Self::ImmS8(x)  => decomp::expr_constant(x as i64),
+            Self::Reg8(x)  => decomp::expr_register(String::from(print_reg(0x0, x))),
+            Self::Reg8H(x) => decomp::expr_register(String::from(print_reg(0x4, x))),
+            Self::Reg16(x) => decomp::expr_register(String::from(print_reg(0x1, x))),
+            Self::Reg32(x) => decomp::expr_register(String::from(print_reg(0x2, x))),
+            Self::Reg64(x) => decomp::expr_register(String::from(print_reg(0x3, x))),
+            Self::PtrRegByte(reg, offset) => {
+                if offset == 0x0 {
+                    decomp::expr_dereference(1, decomp::expr_register(String::from(print_reg(0x3, reg))))
+                } else {
+                    if offset > 0 {
+                        decomp::expr_dereference(1, 
+                            decomp::expr_binary(decomp::OP_ADD, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset as i64)))
+                    }
+                    else {
+                        decomp::expr_dereference(1, 
+                            decomp::expr_binary(decomp::OP_SUB, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset.abs() as i64)))
+                    }
+                }
+            },
+            Self::PtrRegWord(reg, offset) => {
+                if offset == 0x0 {
+                    decomp::expr_dereference(2, decomp::expr_register(String::from(print_reg(0x3, reg))))
+                } else {
+                    if offset > 0 {
+                        decomp::expr_dereference(2, 
+                            decomp::expr_binary(decomp::OP_ADD, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset as i64)))
+                    }
+                    else {
+                        decomp::expr_dereference(2, 
+                            decomp::expr_binary(decomp::OP_SUB, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset.abs() as i64)))
+                    }
+                }
+            },
+            Self::PtrRegDword(reg, offset) => {
+                if offset == 0x0 {
+                    decomp::expr_dereference(4, decomp::expr_register(String::from(print_reg(0x3, reg))))
+                } else {
+                    if offset > 0 {
+                        decomp::expr_dereference(4, 
+                            decomp::expr_binary(decomp::OP_ADD, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset as i64)))
+                    }
+                    else {
+                        decomp::expr_dereference(4, 
+                            decomp::expr_binary(decomp::OP_SUB, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset.abs() as i64)))
+                    }
+                }
+            },
+            Self::PtrRegQword(reg, offset) => {
+                if offset == 0x0 {
+                    decomp::expr_dereference(8, decomp::expr_register(String::from(print_reg(0x3, reg))))
+                } else {
+                    if offset > 0 {
+                        decomp::expr_dereference(8, 
+                            decomp::expr_binary(decomp::OP_ADD, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset as i64)))
+                    }
+                    else {
+                        decomp::expr_dereference(8, 
+                            decomp::expr_binary(decomp::OP_SUB, 
+                                decomp::expr_register(String::from(print_reg(0x3, reg))),
+                                decomp::expr_constant(offset.abs() as i64)))
+                    }
+                }
+            },
+            Self::PtrRelByte(rel) => decomp::expr_dereference(1, decomp::expr_binary(decomp::OP_ADD, decomp::expr_register(String::from("pc")),decomp::expr_constant(rel as i64))),
+            Self::PtrRelWord(rel) => decomp::expr_dereference(2, decomp::expr_binary(decomp::OP_ADD, decomp::expr_register(String::from("pc")),decomp::expr_constant(rel as i64))),
+            Self::PtrRelDword(rel) => decomp::expr_dereference(4, decomp::expr_binary(decomp::OP_ADD, decomp::expr_register(String::from("pc")),decomp::expr_constant(rel as i64))),
+            Self::PtrRelQword(rel) => decomp::expr_dereference(8, decomp::expr_binary(decomp::OP_ADD, decomp::expr_register(String::from("pc")),decomp::expr_constant(rel as i64))),
+            Self::PtrRegRegByte(base, offset, mul) => {
+                if mul == 0x1 {
+                    decomp::expr_dereference(1, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_register(String::from(print_reg(0x3, offset)))))
+                } else {
+                    decomp::expr_dereference(1, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_binary(decomp::OP_MUL, 
+                            decomp::expr_register(String::from(print_reg(0x3, offset))),
+                            decomp::expr_constant(mul as i64))))
+                }
+            },
+            Self::PtrRegRegWord(base, offset, mul) => {
+                if mul == 0x1 {
+                    decomp::expr_dereference(2, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_register(String::from(print_reg(0x3, offset)))))
+                } else {
+                    decomp::expr_dereference(2, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_binary(decomp::OP_MUL, 
+                            decomp::expr_register(String::from(print_reg(0x3, offset))),
+                            decomp::expr_constant(mul as i64))))
+                }
+            },
+            Self::PtrRegRegDword(base, offset, mul) => {
+                if mul == 0x1 {
+                    decomp::expr_dereference(4, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_register(String::from(print_reg(0x3, offset)))))
+                } else {
+                    decomp::expr_dereference(4, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_binary(decomp::OP_MUL, 
+                            decomp::expr_register(String::from(print_reg(0x3, offset))),
+                            decomp::expr_constant(mul as i64))))
+                }
+            },
+            Self::PtrRegRegQword(base, offset, mul) => {
+                if mul == 0x1 {
+                    decomp::expr_dereference(8, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_register(String::from(print_reg(0x3, offset)))))
+                } else {
+                    decomp::expr_dereference(8, decomp::expr_binary(decomp::OP_ADD, 
+                        decomp::expr_register(String::from(print_reg(0x3, base))),
+                        decomp::expr_binary(decomp::OP_MUL, 
+                            decomp::expr_register(String::from(print_reg(0x3, offset))),
+                            decomp::expr_constant(mul as i64))))
+                }
+            },
+            _ => decomp::expr_nop(),
         }
     }
 }
@@ -330,20 +445,48 @@ impl Instruction {
         self.ins_size as usize
     }
 
-    pub fn into(&self) -> dis::Instruction {
+    pub fn into_expr(&self) -> Box<decomp::Expr> {
         match self.operation {
-            Operation::Add   => dis::Instruction { opcode: "add", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::Sub   => dis::Instruction { opcode: "sub", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::And   => dis::Instruction { opcode: "and", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::Or    => dis::Instruction { opcode: "or", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::Xor   => dis::Instruction { opcode: "xor", operands: vec![self.reg1.into(), self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::Mov   => dis::Instruction { opcode: "mov", operands: vec![self.reg1.into(), self.reg2.into()], flags: 0 },
-            Operation::Call  => dis::Instruction { opcode: "call", operands: vec![self.reg1.into()], flags: 0 },
-            Operation::Push  => dis::Instruction { opcode: "push", operands: vec![self.reg1.into()], flags: 0 },
-            Operation::Pop   => dis::Instruction { opcode: "pop", operands: vec![self.reg1.into()], flags: 0 },
-            Operation::Nop   => dis::Instruction { opcode: "nop", operands: vec![], flags: 0 },
-            Operation::Ret   => dis::Instruction { opcode: "ret", operands: vec![], flags: 0 },
-            _ => panic!(""),
+            Operation::Add  => {
+                let lhs = self.reg1.into_expr();
+                let rhs = self.reg2.into_expr();
+                decomp::expr_store(lhs.clone(), decomp::expr_binary(decomp::OP_SUB, lhs, rhs))
+            },
+            Operation::Adc  => decomp::expr_special("adc", vec![self.reg1.into_expr(), self.reg2.into_expr()]), // format!("adc {}, {}", self.reg1.print(), self.reg2.print()),
+            Operation::Sub  => {
+                let lhs = self.reg1.into_expr();
+                let rhs = self.reg2.into_expr();
+                decomp::expr_store(lhs.clone(), decomp::expr_binary(decomp::OP_SUB, lhs, rhs))
+            },
+            Operation::Or   => {
+                let lhs = self.reg1.into_expr();
+                let rhs = self.reg2.into_expr();
+                decomp::expr_store(lhs.clone(), decomp::expr_binary(decomp::OP_OR, lhs, rhs))
+            },
+            Operation::And  => {
+                let lhs = self.reg1.into_expr();
+                let rhs = self.reg2.into_expr();
+                decomp::expr_store(lhs.clone(), decomp::expr_binary(decomp::OP_AND, lhs, rhs))
+            },
+            Operation::Xor  => {
+                let lhs = self.reg1.into_expr();
+                let rhs = self.reg2.into_expr();
+                decomp::expr_store(lhs.clone(), decomp::expr_binary(decomp::OP_XOR, lhs, rhs))
+            },
+            Operation::Test => decomp::expr_special("test", vec![self.reg1.into_expr(), self.reg2.into_expr()]), //format!("test {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Cmp  => decomp::expr_special("cmp", vec![self.reg1.into_expr(), self.reg2.into_expr()]), //format!("cmp {}, {}",  self.reg1.print(), self.reg2.print()),
+            Operation::Mov  => {
+                let dst = self.reg1.into_expr();
+                let src = self.reg2.into_expr();
+                decomp::expr_store(dst, src)
+            },
+            Operation::Push => decomp::expr_special("push", vec![self.reg1.into_expr()]), // format!("push {}",    self.reg1.print()),
+            Operation::Pop  => decomp::expr_special("pop", vec![self.reg1.into_expr()]), // format!("pop {}",     self.reg1.print()),
+            Operation::Nop  => decomp::expr_nop(), // format!("nop"),
+            Operation::Ret  => decomp::expr_ret(), // format!("ret"),
+            Operation::Call => decomp::expr_call(self.reg1.into_expr()),
+            Operation::Unknown => decomp::expr_register(format!("(bad)")),
+            _ => decomp::expr_register(format!("unknown"))
         }
     }
 }

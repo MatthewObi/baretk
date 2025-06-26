@@ -1,12 +1,14 @@
 use core::slice;
-use std::{ffi::{c_int, CStr}};
+use std::{ffi::{c_int, CStr}, ptr::{null, null_mut}};
 
 use dis::Disassembly;
 use prog::{Program, Segment};
+use decomp::Decomp;
 use util::LITTLE_ENDIAN;
 
 mod query;
 mod dis;
+mod decomp;
 mod prog;
 mod util;
 
@@ -53,14 +55,12 @@ fn cstr_to_string(s: *const i8) -> Option<String> {
 
 #[no_mangle]
 pub extern "C" fn baretk_print_strings(path: *const i8, min_len: i32, printable: bool, out_path: *const i8) -> i32 {
-    let in_file = match cstr_to_string(path) {
-        Some(s) => s,
-        None => { return 0; }
+    let Some(in_file) = cstr_to_string(path) else {
+        return 0;
     };
 
-    let contents = match util::try_read_file_contents(in_file.as_str()) {
-        Err(()) => return 0,
-        Ok(vec) => vec,
+    let Ok(contents) = util::try_read_file_contents(in_file.as_str()) else {
+        return 0;
     };
 
     let strings = query::get_strings(contents.as_slice(), min_len as usize, printable);
@@ -116,14 +116,12 @@ pub extern "C" fn baretk_print_strings_from_bytes(bytes: *const u8, size: usize,
 
 #[no_mangle]
 pub extern "C" fn baretk_disassemble_file(path: *const i8, out_path: *const i8) -> i32 {
-    let in_file = match cstr_to_string(path) {
-        Some(s) => s,
-        None => { return 0; }
+    let Some(in_file) = cstr_to_string(path) else {
+        return 0;
     };
 
-    let contents = match util::try_read_file_contents(in_file.as_str()) {
-        Err(()) => return 0,
-        Ok(vec) => vec,
+    let Ok(contents) = util::try_read_file_contents(in_file.as_str()) else {
+        return 0;
     };
 
     let dis = dis::disassemble(&contents);
@@ -142,16 +140,12 @@ pub extern "C" fn baretk_disassemble_file(path: *const i8, out_path: *const i8) 
 
 #[no_mangle]
 pub extern "C" fn baretk_load_program(path: *const i8) -> *mut prog::Program {
-    let in_file = match cstr_to_string(path) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
+    let Some(in_file) = cstr_to_string(path) else {
+        return null_mut();
     };
 
-    let prog = match prog::load_program_from_file(&in_file) {
-        Ok(prog) => prog,
-        Err(()) => {
-            return std::ptr::null_mut()
-        },
+    let Ok(prog) = prog::load_program_from_file(&in_file) else {
+        return null_mut();
     };
 
     Box::into_raw(Box::new(prog))
@@ -160,7 +154,7 @@ pub extern "C" fn baretk_load_program(path: *const i8) -> *mut prog::Program {
 #[no_mangle]
 pub extern "C" fn baretk_clone_program(program: *const Program) -> *mut Program {
     if program.is_null() {
-        return std::ptr::null_mut();
+        return null_mut();
     }
     
     unsafe {
@@ -201,7 +195,7 @@ pub extern "C" fn baretk_get_machine_type(program: *const Program) -> *const i8 
 #[no_mangle]
 pub extern "C" fn baretk_get_segments(program: *const Program) -> SegmentArray {
     if program.is_null() {
-        return SegmentArray { ptr: std::ptr::null(), size: 0usize }
+        return SegmentArray { ptr: null(), size: 0usize }
     }
 
     unsafe { 
@@ -212,12 +206,12 @@ pub extern "C" fn baretk_get_segments(program: *const Program) -> SegmentArray {
 #[no_mangle]
 pub extern "C" fn baretk_get_section(program: *const Program, k: *const i8) -> SectionC {
     if program.is_null() {
-        return SectionC { addr: 0, bytes: U8Array { ptr: std::ptr::null(), size: 0usize } };
+        return SectionC { addr: 0, bytes: U8Array { ptr: null(), size: 0usize } };
     }
 
     let key = match cstr_to_string(k) {
         Some(s) => s,
-        None => { return SectionC { addr: 0, bytes: U8Array { ptr: std::ptr::null(), size: 0usize } }; }
+        None => { return SectionC { addr: 0, bytes: U8Array { ptr: null(), size: 0usize } }; }
     };
 
     unsafe { 
@@ -225,7 +219,7 @@ pub extern "C" fn baretk_get_section(program: *const Program, k: *const i8) -> S
         if let Some(sect) = section {
             SectionC { addr: sect.addr, bytes: U8Array { ptr: sect.bytes.as_ptr(), size: sect.bytes.len() } }
         } else {
-            SectionC { addr: 0, bytes: U8Array { ptr: std::ptr::null(), size: 0usize } }
+            SectionC { addr: 0, bytes: U8Array { ptr: null(), size: 0usize } }
         }
     }
 }
@@ -233,7 +227,7 @@ pub extern "C" fn baretk_get_section(program: *const Program, k: *const i8) -> S
 #[no_mangle]
 pub extern "C" fn baretk_disassemble_from_program(program: *mut Program) -> *mut Disassembly {
     if program.is_null() {
-        return std::ptr::null_mut();
+        return null_mut();
     }
 
     let dis = unsafe {
@@ -245,16 +239,12 @@ pub extern "C" fn baretk_disassemble_from_program(program: *mut Program) -> *mut
 
 #[no_mangle]
 pub extern "C" fn baretk_disassemble_from_file(path: *const i8) -> *mut Disassembly {
-    let in_file = match cstr_to_string(path) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
+    let Some(in_file) = cstr_to_string(path) else {
+        return null_mut();
     };
 
-    let prog = match prog::load_program_from_file(&in_file) {
-        Ok(prog) => prog,
-        Err(()) => {
-            return std::ptr::null_mut()
-        },
+    let Ok(prog) = prog::load_program_from_file(&in_file) else {
+        return null_mut();
     };
 
     let dis = dis::disassemble_program(prog);
@@ -264,7 +254,7 @@ pub extern "C" fn baretk_disassemble_from_file(path: *const i8) -> *mut Disassem
 #[no_mangle]
 pub extern "C" fn baretk_get_program_from_disassembly(disasm: *const Disassembly) -> *const Program {
     if disasm.is_null() {
-        return std::ptr::null_mut();
+        return null_mut();
     }
 
     unsafe { (*disasm).program() }
@@ -278,5 +268,57 @@ pub extern "C" fn baretk_free_disassembly(disasm: *mut Disassembly) {
 
     unsafe {
         drop(Box::from_raw(disasm))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn baretk_decomp_disassembly(disasm: *mut Disassembly, lang: i32) -> *mut Decomp {
+    if disasm.is_null() {
+        return null_mut();
+    }
+
+    unsafe {
+        let dis = Box::from_raw(disasm);
+        let lang = match lang {
+            0 => decomp::Language::Pseudocode,
+            1 => decomp::Language::C,
+            _ => decomp::Language::Pseudocode,
+        };
+        let dec = decomp::decomp_program(*dis, lang);
+        Box::into_raw(Box::new(dec))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn baretk_decomp_from_file(path: *const i8) -> *mut Decomp {
+    let Some(in_file) = cstr_to_string(path) else {
+        return null_mut();
+    };
+
+    let Ok(bytes) = util::try_read_file_contents(in_file.as_str()) else {
+        return null_mut();
+    };
+
+    let decomp = decomp::decomp_program_from_bytes(bytes.as_slice(), decomp::Language::Pseudocode);
+    Box::into_raw(Box::new(decomp))
+}
+
+#[no_mangle]
+pub extern "C" fn baretk_get_disassembly_from_decomp(decomp: *const Decomp) -> *const Disassembly {
+    if decomp.is_null() {
+        return null_mut();
+    }
+
+    unsafe { &(*decomp).disassembly }
+}
+
+#[no_mangle]
+pub extern "C" fn baretk_free_decomp(decomp: *mut Decomp) {
+    if decomp.is_null() {
+        return;
+    }
+
+    unsafe {
+        drop(Box::from_raw(decomp))
     }
 }
